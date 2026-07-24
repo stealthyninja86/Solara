@@ -1,0 +1,91 @@
+package com.solara.authservice.controller;
+
+import com.solara.authservice.dto.request.LoginRequest;
+import com.solara.authservice.dto.request.RegisterRequest;
+import com.solara.authservice.dto.response.AuthResponse;
+import com.solara.authservice.dto.response.UserProfileResponse;
+import com.solara.authservice.service.AuthFacade;
+import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Objects;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/auth")
+public class AuthController {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
+
+    private final AuthFacade authFacade;
+    private final long refreshTokenValidity;
+
+    public AuthController(AuthFacade authFacade,
+                          @Value("${jwt.refresh-expiry}") long refreshTokenValidity) {
+        this.authFacade = authFacade;
+        this.refreshTokenValidity = refreshTokenValidity;
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
+        var response = authFacade.registerUser(request);
+        log.info("Registered user: {}", response.email());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, buildRefreshCookie(response.refreshToken()).toString())
+                .body(new AuthResponse(response.accessToken(), response.email(), "User Registered Successfully"));
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request,
+                                               @CookieValue(value = "refreshToken", required = false) String refreshTokenCookie) {
+        var existing = authFacade.tryRefreshSession(refreshTokenCookie);
+        if (existing.isPresent()) {
+            var response = existing.get();
+            log.info("Already logged in: {}", response.email());
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.SET_COOKIE, buildRefreshCookie(response.refreshToken()).toString())
+                    .body(new AuthResponse(response.accessToken(), response.email(), "Already logged in"));
+        }
+        var response = authFacade.loginUser(request);
+        log.info("Login successful: {}", response.email());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, buildRefreshCookie(response.refreshToken()).toString())
+                .body(new AuthResponse(response.accessToken(), response.email(), "User Login Successfully"));
+    }
+
+    @PostMapping("/token")
+    public ResponseEntity<AuthResponse> refresh(@CookieValue("refreshToken") String refreshToken) {
+        var response = authFacade.refreshToken(refreshToken);
+        log.info("Refresh successful");
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, buildRefreshCookie(response.refreshToken()).toString())
+                .body(new AuthResponse(response.accessToken(), response.email(), "Token Refreshed Successfully"));
+    }
+
+    private ResponseCookie buildRefreshCookie(String token) {
+        return ResponseCookie.from("refreshToken", token)
+                .httpOnly(true)
+                .secure(true)
+                .sameSite("Strict")
+                .path("/auth")
+                .maxAge(refreshTokenValidity / 1000)
+                .build();
+    }
+
+    @GetMapping("/profile")
+    public ResponseEntity<UserProfileResponse> getUserProfile() {
+        var auth = (JwtAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
+        assert auth != null;
+        UUID userId = UUID.fromString(Objects.requireNonNull(auth.getToken().getSubject()));
+        UserProfileResponse user = authFacade.getUserById(userId);
+        return ResponseEntity.ok(user);
+    }
+}
