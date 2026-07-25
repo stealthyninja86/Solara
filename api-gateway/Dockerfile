@@ -16,13 +16,17 @@ RUN mvn clean package -Dmaven.test.skip=true
 # Stage 2: Runtime Stage
 FROM eclipse-temurin:21-jre
 
+# Install curl for healthcheck
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy JAR from builder stage
-COPY --from=builder /app/target/auth-service-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=builder /app/target/api-gateway-0.0.1-SNAPSHOT.jar app.jar
+COPY src/main/resources/keys/public.pem keys/public.pem
 
 # Expose port
-EXPOSE 4001
+EXPOSE 4000
 
 # Run application
 ENTRYPOINT ["java", "-jar", "app.jar"]

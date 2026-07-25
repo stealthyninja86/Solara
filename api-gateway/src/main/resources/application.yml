@@ -1,0 +1,147 @@
+
+spring:
+  application:
+    name: api-gateway
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          public-key-location: classpath:keys/public.pem
+
+  cloud:
+    gateway:
+      server:
+        webflux:
+          metrics:
+            enabled: true
+
+          routes:
+            - id: auth-service
+              uri: http://auth-service:4001
+              predicates:
+                - Path=/api/v1/auth/**
+                - Method=GET,POST,PUT,DELETE
+              filters:
+                - StripPrefix=2
+                - name: CircuitBreaker
+                  args:
+                    name: authServiceCB
+                    fallbackUri: forward:/fallback/auth
+
+            - id: transaction-service-write
+              uri: http://transaction-service:4002
+              predicates:
+                - Path=/api/v1/transactions/**
+                - Method=POST,DELETE
+              filters:
+                - StripPrefix=2
+                - name: CircuitBreaker
+                  args:
+                    name: transactionServiceCB
+                    fallbackUri: forward:/fallback/transactions
+
+            - id: insight-service-read
+              uri: http://insight-service:4003
+              predicates:
+                - Path=/api/v1/transactions/**
+                - Method=GET
+              filters:
+                - StripPrefix=2
+                - name: CircuitBreaker
+                  args:
+                    name: insightServiceCB
+                    fallbackUri: forward:/fallback/insight
+
+            - id: insight-service-insights
+              uri: http://insight-service:4003
+              predicates:
+                - Path=/api/v1/insights/**
+                - Method=GET
+              filters:
+                - StripPrefix=2
+                - name: CircuitBreaker
+                  args:
+                    name: insightServiceCB
+                    fallbackUri: forward:/fallback/insight
+
+          default-filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 100
+                redis-rate-limiter.burstCapacity: 200
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials
+
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowedOrigins: "http://localhost:3000"
+                allowedMethods: "*"
+                allowedHeaders: "*"
+                allowCredentials: true
+
+          httpclient:
+            connect-timeout: 2000
+            response-timeout: 5s
+            pool:
+              type: elastic
+              max-connections: 500
+              max-idle-time: 60s
+              max-life-time: 300s
+              acquire-timeout: 3000
+
+  data:
+    redis:
+      host: redis
+      port: 6379
+      timeout: 2000ms
+      connect-timeout: 2000ms
+
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      authServiceCB:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        failureRateThreshold: 40
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 5
+        minimumNumberOfCalls: 10
+
+      transactionServiceCB:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        failureRateThreshold: 40
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 5
+        minimumNumberOfCalls: 10
+
+      insightServiceCB:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        failureRateThreshold: 40
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 5
+        minimumNumberOfCalls: 10
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway,metrics
+  endpoint:
+    health:
+      show-details: always
+  health:
+    redis:
+      enabled: false
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+server:
+  port: 4000
+  shutdown: graceful

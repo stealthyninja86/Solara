@@ -27,11 +27,17 @@ public class AuthController {
 
     private final AuthFacade authFacade;
     private final long refreshTokenValidity;
+    private final boolean cookieSecure;
+    private final String cookiePath;
 
     public AuthController(AuthFacade authFacade,
-                          @Value("${jwt.refresh-expiry}") long refreshTokenValidity) {
+                          @Value("${jwt.refresh-expiry}") long refreshTokenValidity,
+                          @Value("${cookie.secure:true}") boolean cookieSecure,
+                          @Value("${cookie.path:/auth}") String cookiePath) {
         this.authFacade = authFacade;
         this.refreshTokenValidity = refreshTokenValidity;
+        this.cookieSecure = cookieSecure;
+        this.cookiePath = cookiePath;
     }
 
     @PostMapping("/register")
@@ -73,9 +79,9 @@ public class AuthController {
     private ResponseCookie buildRefreshCookie(String token) {
         return ResponseCookie.from("refreshToken", token)
                 .httpOnly(true)
-                .secure(true)
+                .secure(cookieSecure)
                 .sameSite("Strict")
-                .path("/auth")
+                .path(cookiePath)
                 .maxAge(refreshTokenValidity / 1000)
                 .build();
     }
