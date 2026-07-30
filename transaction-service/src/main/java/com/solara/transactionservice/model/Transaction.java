@@ -1,5 +1,6 @@
 package com.solara.transactionservice.model;
 
+import com.solara.transactionservice.dto.request.UpdateTransactionRequest;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
@@ -30,11 +31,18 @@ public class Transaction {
     @Column(name = "payment_mode", nullable = false, length = 20)
     private PaymentMode paymentMode;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private TransactionType type;
+
     @Column(nullable = false, length = 3)
     private String currency;
 
     @Column(nullable = false)
     private Instant timestamp;
+
+    @Column(name = "bulk_import", nullable = false)
+    private boolean bulkImport;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -45,14 +53,29 @@ public class Transaction {
     public Transaction() {}
 
     public Transaction(UUID userId, BigDecimal amount, String description,
-                       String merchant, PaymentMode paymentMode) {
+                       String merchant, PaymentMode paymentMode, TransactionType type) {
+        this(userId, amount, description, merchant, paymentMode, type, false);
+    }
+
+    public Transaction(UUID userId, BigDecimal amount, String description,
+                       String merchant, PaymentMode paymentMode, TransactionType type,
+                       boolean isBulkImport) {
         this.userId = userId;
         this.amount = amount;
         this.description = description;
         this.merchant = merchant;
         this.paymentMode = paymentMode;
+        this.type = type;
         this.currency = "INR";
         this.timestamp = Instant.now();
+        this.bulkImport = isBulkImport;
+    }
+
+    public void applyPartialUpdate(UpdateTransactionRequest request) {
+        if (request.amount() != null) this.amount = request.amount();
+        if (request.description() != null) this.description = request.description();
+        if (request.merchant() != null) this.merchant = request.merchant();
+        if (request.paymentMode() != null) this.paymentMode = request.paymentMode();
     }
 
     @PrePersist
@@ -65,6 +88,9 @@ public class Transaction {
     protected void onUpdate() {
         updatedAt = Instant.now();
     }
+
+    public boolean isBulkImport() { return bulkImport; }
+    public void setBulkImport(boolean bulkImport) { this.bulkImport = bulkImport; }
 
     public UUID getId() {
         return id;
@@ -112,6 +138,14 @@ public class Transaction {
 
     public void setPaymentMode(PaymentMode paymentMode) {
         this.paymentMode = paymentMode;
+    }
+
+    public TransactionType getType() {
+        return type;
+    }
+
+    public void setType(TransactionType type) {
+        this.type = type;
     }
 
     public String getCurrency() {

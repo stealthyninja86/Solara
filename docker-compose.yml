@@ -111,6 +111,10 @@ services:
       SPRING_DATASOURCE_PASSWORD: password
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      APP_UPLOAD_DIRECTORY: /app/data/uploads
+      SPRING_SERVLET_MULTIPART_LOCATION: /app/data/uploads/tmp
+    volumes:
+      - ./data/uploads:/app/data/uploads
     depends_on:
       transaction-service-db:
         condition: service_healthy
@@ -120,7 +124,7 @@ services:
       - internal
 
   insight-service-db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: insight-service-db
     environment:
       POSTGRES_DB: db
@@ -154,6 +158,8 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+      SPRING_AI_OLLAMA_BASE_URL: http://ollama:11434
+      APP_CATEGORIZATION_SKIP_AI: "false"
     depends_on:
       insight-service-db:
         condition: service_healthy
@@ -161,6 +167,24 @@ services:
         condition: service_started
       redis:
         condition: service_healthy
+      ollama:
+        condition: service_healthy
+    networks:
+      - internal
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: [ "CMD", "ollama", "list" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     networks:
       - internal
 
@@ -169,13 +193,14 @@ services:
     container_name: kafka
     ports:
       - "9092:9092"
+      - "9094:9094"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_LOG_DIRS: /var/lib/kafka/data
@@ -201,3 +226,4 @@ volumes:
   transaction-db-data:
   insight-db-data:
   kafka-data:
+  ollama-data:

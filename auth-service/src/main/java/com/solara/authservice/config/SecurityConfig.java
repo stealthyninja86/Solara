@@ -24,7 +24,7 @@ public class SecurityConfig {
     @Order(1)
     public SecurityFilterChain publicEndpoints(HttpSecurity http) throws Exception {
         http
-                .securityMatcher("/auth/register", "/auth/login", "/auth/token")
+                .securityMatcher("/auth/register", "/auth/login", "/auth/token", "/auth/logout")
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))

@@ -21,7 +21,6 @@ spring:
               uri: http://auth-service:4001
               predicates:
                 - Path=/api/v1/auth/**
-                - Method=GET,POST,PUT,DELETE
               filters:
                 - StripPrefix=2
                 - name: CircuitBreaker
@@ -29,11 +28,10 @@ spring:
                     name: authServiceCB
                     fallbackUri: forward:/fallback/auth
 
-            - id: transaction-service-write
+            - id: transaction-service
               uri: http://transaction-service:4002
               predicates:
                 - Path=/api/v1/transactions/**
-                - Method=POST,DELETE
               filters:
                 - StripPrefix=2
                 - name: CircuitBreaker
@@ -41,13 +39,11 @@ spring:
                     name: transactionServiceCB
                     fallbackUri: forward:/fallback/transactions
 
-            - id: insight-service-read
+            - id: insight-service-category
               uri: http://insight-service:4003
               predicates:
-                - Path=/api/v1/transactions/**
-                - Method=GET
+                - Path=/api/v1/category/**
               filters:
-                - StripPrefix=2
                 - name: CircuitBreaker
                   args:
                     name: insightServiceCB
@@ -57,9 +53,7 @@ spring:
               uri: http://insight-service:4003
               predicates:
                 - Path=/api/v1/insights/**
-                - Method=GET
               filters:
-                - StripPrefix=2
                 - name: CircuitBreaker
                   args:
                     name: insightServiceCB
@@ -75,7 +69,7 @@ spring:
           globalcors:
             cors-configurations:
               '[/**]':
-                allowedOrigins: "http://localhost:3000"
+                allowedOrigins: "http://localhost:5173,http://localhost:5174,http://localhost:3000"
                 allowedMethods: "*"
                 allowedHeaders: "*"
                 allowCredentials: true

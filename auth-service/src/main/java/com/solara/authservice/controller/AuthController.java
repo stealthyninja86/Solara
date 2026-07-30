@@ -76,6 +76,14 @@ public class AuthController {
                 .body(new AuthResponse(response.accessToken(), response.email(), "Token Refreshed Successfully"));
     }
 
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout() {
+        log.info("User logged out");
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString())
+                .build();
+    }
+
     private ResponseCookie buildRefreshCookie(String token) {
         return ResponseCookie.from("refreshToken", token)
                 .httpOnly(true)
@@ -83,6 +91,16 @@ public class AuthController {
                 .sameSite("Strict")
                 .path(cookiePath)
                 .maxAge(refreshTokenValidity / 1000)
+                .build();
+    }
+
+    private ResponseCookie clearRefreshCookie() {
+        return ResponseCookie.from("refreshToken", "")
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .sameSite("Strict")
+                .path(cookiePath)
+                .maxAge(0)
                 .build();
     }
 

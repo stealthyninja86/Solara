@@ -10,7 +10,7 @@ import com.solara.transactionservice.repository.TransactionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -28,15 +28,10 @@ public class TransactionService {
     @Transactional
     public TransactionResponse create(CreateTransactionRequest request) {
         Transaction transaction = new Transaction(request.userId(), request.amount(), request.description(),
-                request.merchant(), request.paymentMode());
+                request.merchant(), request.paymentMode(), request.type());
         transaction = transactionRepository.save(transaction);
 
-        String payload = String.format("""
-                {"eventId":"%s","eventVersion":1,"eventType":"transaction.created.v1","occurredAt":"%s","payload":%s}
-                """, transaction.getId(), Instant.now(), buildTransactionPayload(transaction));
-
-        OutboxEntity outbox = new OutboxEntity(transaction.getId(), "transaction.created.v1", payload);
-        outboxRepository.save(outbox);
+        outboxRepository.save(OutboxEntity.forTransaction(transaction));
 
         return toResponse(transaction);
     }
@@ -46,27 +41,24 @@ public class TransactionService {
         Transaction transaction = transactionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Transaction not found"));
 
-        if (updateRequest.amount() != null)
-            transaction.setAmount(updateRequest.amount());
-        if (updateRequest.description() != null)
-            transaction.setDescription(updateRequest.description());
-        if (updateRequest.merchant() != null)
-            transaction.setMerchant(updateRequest.merchant());
-        if (updateRequest.paymentMode() != null)
-            transaction.setPaymentMode(updateRequest.paymentMode());
-
-        transaction.setTimestamp(Instant.now());
-
+        transaction.applyPartialUpdate(updateRequest);
         transaction = transactionRepository.save(transaction);
 
-        String payload = String.format("""
-                {"eventId":"%s","eventVersion":1,"eventType":"transaction.updated.v1","occurredAt":"%s","payload":%s}
-                """, transaction.getId(), Instant.now(), buildTransactionPayload(transaction));
-
-        OutboxEntity outbox = new OutboxEntity(transaction.getId(), "transaction.updated.v1", payload);
-        outboxRepository.save(outbox);
+        outboxRepository.save(OutboxEntity.forTransaction(transaction, "transaction.updated.v1"));
 
         return toResponse(transaction);
+    }
+
+    public TransactionResponse findById(UUID id) {
+        Transaction transaction = transactionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Transaction not found"));
+        return toResponse(transaction);
+    }
+
+    public List<TransactionResponse> findAll() {
+        return transactionRepository.findAll().stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Transactional
@@ -74,13 +66,7 @@ public class TransactionService {
         Transaction transaction = transactionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Transaction not found"));
 
-        String payload = String.format("""
-                {"eventId":"%s","eventVersion":1,"eventType":"transaction.deleted.v1","occurredAt":"%s","payload":{"transactionId":"%s","userId":"%s"}}
-                """, UUID.randomUUID(), Instant.now(), transaction.getId(), transaction.getUserId());
-
-        OutboxEntity outbox = new OutboxEntity(transaction.getId(), "transaction.deleted.v1", payload);
-        outboxRepository.save(outbox);
-
+        outboxRepository.save(OutboxEntity.forDeletedTransaction(transaction));
         transactionRepository.delete(transaction);
     }
 
@@ -88,18 +74,7 @@ public class TransactionService {
         return new TransactionResponse(
                 transaction.getId(), transaction.getUserId(), transaction.getAmount(),
                 transaction.getDescription(), transaction.getMerchant(), transaction.getPaymentMode(),
-                transaction.getCurrency(), transaction.getTimestamp(),
+                transaction.getType(), transaction.getCurrency(), transaction.getTimestamp(),
                 transaction.getCreatedAt(), transaction.getUpdatedAt());
-    }
-
-    private String buildTransactionPayload(Transaction transaction) {
-        return String.format("""
-                {"transactionId":"%s","userId":"%s","description":"%s","amount":%s,"currency":"%s","merchant":"%s","paymentMode":"%s","timestamp":"%s"}
-                """,
-                transaction.getId(), transaction.getUserId(),
-                transaction.getDescription() != null ? transaction.getDescription() : "",
-                transaction.getAmount(), transaction.getCurrency(),
-                transaction.getMerchant(), transaction.getPaymentMode(),
-                transaction.getTimestamp());
     }
 }
