@@ -34,6 +34,6 @@ export const CATEGORY_EMOJIS: Record<string, string> = {
 };
 
 export const CATEGORY_COLORS = [
-  "#f97316", "#22c55e", "#3b82f6", "#a855f7",
-  "#ef4444", "#eab308", "#06b6d4", "#ec4899",
+  "var(--color-cat-1)", "var(--color-cat-2)", "var(--color-cat-3)", "var(--color-cat-4)",
+  "var(--color-cat-5)", "var(--color-cat-6)", "var(--color-cat-7)", "var(--color-cat-8)",
 ];

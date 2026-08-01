@@ -53,7 +53,7 @@ export function QuickReviewModal({
       {reviewData?.llmMessage && (
         <div className="detail-field" style={{ alignItems: "flex-start" }}>
           <span className="label">LLM Note</span>
-          <span className="value" style={{ fontSize: "0.7rem", color: "#a3a3a3", textAlign: "right", maxWidth: "60%" }}>
+          <span className="value" style={{ fontSize: "0.7rem", color: "var(--color-text-secondary)", textAlign: "right", maxWidth: "60%" }}>
             {reviewData.llmMessage}
           </span>
         </div>

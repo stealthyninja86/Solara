@@ -4,9 +4,10 @@ import { Modal } from "./Modal";
 
 interface Props {
   refreshKey?: number;
+  onBudgetUpdated?: () => void;
 }
 
-export function BudgetCard({ refreshKey = 0 }: Props) {
+export function BudgetCard({ refreshKey = 0, onBudgetUpdated }: Props) {
   const {
     monthlyBudget, totalSpent, remaining,
     hasBudget, exceeded, setMonthlyBudget,
@@ -44,6 +45,7 @@ export function BudgetCard({ refreshKey = 0 }: Props) {
     setSaving(false);
     if (ok) {
       setShowInput(false);
+      onBudgetUpdated?.();
     } else {
       setSaveError(true);
       setTimeout(() => setSaveError(false), 3000);
@@ -53,22 +55,8 @@ export function BudgetCard({ refreshKey = 0 }: Props) {
   const showModal = exceeded && showExceeded;
 
   return (
-    <div className="card budget-card">
-      <h2 className="flex items-center gap-2">
-        Budget
-        {hasBudget && !showInput && (
-          <button
-            className="btn-edit-budget"
-            onClick={() => {
-              setInputValue(String(monthlyBudget));
-              setShowInput(true);
-            }}
-            title="Edit budget"
-          >
-            {'\u270E'}
-          </button>
-        )}
-      </h2>
+    <div className="card budget-card h-full">
+      <h2>Budget</h2>
 
       <div
         className="budget-ring-wrapper"
@@ -76,7 +64,7 @@ export function BudgetCard({ refreshKey = 0 }: Props) {
         onMouseLeave={() => setHover(false)}
       >
         <svg viewBox="0 0 120 120" className="budget-ring">
-          <circle cx="60" cy="60" r={radius} fill="none" stroke="#1e1e1e" strokeWidth="8" />
+          <circle cx="60" cy="60" r={radius} fill="none" stroke="var(--color-border)" strokeWidth="8" />
           {hasBudget && (
             <circle
               cx="60"
@@ -94,29 +82,29 @@ export function BudgetCard({ refreshKey = 0 }: Props) {
           )}
           {hasBudget && !hover && (
             <>
-              <text x="60" y="52" textAnchor="middle" fill="#ffffff" fontSize="22" fontWeight="bold">
+              <text x="60" y="52" textAnchor="middle" fill="var(--color-text)" fontSize="22" fontWeight="bold">
                 {exceeded ? '-' : Math.round(usagePct)}%
               </text>
-              <text x="60" y="68" textAnchor="middle" fill="#a3a3a3" fontSize="9">
+              <text x="60" y="68" textAnchor="middle" fill="var(--color-text-secondary)" fontSize="9">
                 {centerLabel}
               </text>
             </>
           )}
           {hasBudget && hover && (
             <>
-              <text x="60" y="46" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="bold">
+              <text x="60" y="46" textAnchor="middle" fill="var(--color-text)" fontSize="11" fontWeight="bold">
                 {'\u20B9'}{Math.abs(exceeded ? totalSpent : remaining).toFixed(0)}
               </text>
-              <text x="60" y="60" textAnchor="middle" fill="#a3a3a3" fontSize="8">
+              <text x="60" y="60" textAnchor="middle" fill="var(--color-text-secondary)" fontSize="8">
                 {exceeded ? "spent /" : "left of"}
               </text>
-              <text x="60" y="74" textAnchor="middle" fill="#a3a3a3" fontSize="8">
+              <text x="60" y="74" textAnchor="middle" fill="var(--color-text-secondary)" fontSize="8">
                 {'\u20B9'}{monthlyBudget.toFixed(0)}
               </text>
             </>
           )}
           {!hasBudget && (
-            <text x="60" y="56" textAnchor="middle" fill="#666" fontSize="9" fontWeight="bold">
+            <text x="60" y="56" textAnchor="middle" fill="var(--color-text-muted)" fontSize="9" fontWeight="bold">
               No Budget
             </text>
           )}
@@ -190,7 +178,7 @@ export function BudgetCard({ refreshKey = 0 }: Props) {
             </div>
             <div className="detail-field">
               <span className="label">Overshoot</span>
-              <span className="value" style={{ color: "#ff4444" }}>{'\u20B9'}{Math.abs(remaining).toFixed(0)}</span>
+              <span className="value" style={{ color: "var(--color-error)" }}>{'\u20B9'}{Math.abs(remaining).toFixed(0)}</span>
             </div>
           </div>
           <button

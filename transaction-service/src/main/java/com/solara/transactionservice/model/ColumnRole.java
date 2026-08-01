@@ -3,6 +3,8 @@ package com.solara.transactionservice.model;
 public enum ColumnRole {
     DATE,
     NARRATION,
+    MERCHANT,
+    DESCRIPTION,
     DEBIT,
     CREDIT,
     AMOUNT,

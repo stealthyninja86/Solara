@@ -27,7 +27,7 @@ export function Dashboard() {
     <div
       ref={pullRef}
       style={{ width: "100%" }}
-      className="rounded-2xl border border-[#1e1e1e] bg-[#0a0a0a] p-12"
+      className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-12"
     >
       {transactionsManager.pullRefreshing && (
         <div className="flex justify-center py-3">
@@ -50,9 +50,8 @@ export function Dashboard() {
           onTransactionTypeChange={transactionSubmit.setTransactionType}
           onDescriptionChange={transactionSubmit.setDescription}
           onSubmit={transactionSubmit.handleSubmit}
-          onImportComplete={() => transactionsManager.fetchTransactions(0)}
         />
-        <BudgetCard refreshKey={budgetKey} />
+        <BudgetCard refreshKey={budgetKey} onBudgetUpdated={() => setBudgetKey((previous) => previous + 1)} />
       </div>
 
       <SuccessModal

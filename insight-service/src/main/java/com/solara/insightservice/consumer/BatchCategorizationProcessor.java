@@ -1,13 +1,11 @@
 package com.solara.insightservice.consumer;
 
-import com.solara.insightservice.dto.AgentResult;
-import com.solara.insightservice.service.CacheService;
-import com.solara.insightservice.categorization.CategorizationAgent;
-import com.solara.insightservice.categorization.CategoryValidator;
+import com.solara.insightservice.dto.response.AgentResult;
+import com.solara.insightservice.dto.request.CategorizationInput;
 import com.solara.insightservice.model.CategorizedTransaction;
 import com.solara.insightservice.repository.CategorizedTransactionRepository;
-import com.solara.insightservice.service.EmbeddingService;
-import com.solara.insightservice.service.ProjectionUpdateService;
+import com.solara.insightservice.service.CategorizationService;
+import com.solara.insightservice.service.ProjectionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,26 +25,17 @@ public class BatchCategorizationProcessor {
     private static final int BATCH_SIZE = 50;
 
     private final CategorizedTransactionRepository transactionRepository;
-    private final CategorizationAgent agent;
-    private final CategoryValidator validator;
-    private final CacheService cacheService;
-    private final ProjectionUpdateService projectionService;
-    private final EmbeddingService embeddingService;
+    private final CategorizationService categorizationService;
+    private final ProjectionService projectionService;
     private final boolean skipAi;
 
     public BatchCategorizationProcessor(CategorizedTransactionRepository transactionRepository,
-                                        CategorizationAgent agent,
-                                        CategoryValidator validator,
-                                        CacheService cacheService,
-                                        ProjectionUpdateService projectionService,
-                                        EmbeddingService embeddingService,
+                                        CategorizationService categorizationService,
+                                        ProjectionService projectionService,
                                         @Value("${app.categorization.skip-ai:false}") boolean skipAi) {
         this.transactionRepository = transactionRepository;
-        this.agent = agent;
-        this.validator = validator;
-        this.cacheService = cacheService;
+        this.categorizationService = categorizationService;
         this.projectionService = projectionService;
-        this.embeddingService = embeddingService;
         this.skipAi = skipAi;
     }
 
@@ -67,19 +56,16 @@ public class BatchCategorizationProcessor {
             String normalized = transaction.getNormalizedMerchant();
             if (normalized == null) continue;
 
-            AgentResult cached = cacheService.get(normalized, transaction.getUserId());
-            if (cached != null) {
-                applyCategory(transaction, cached);
-                transactionRepository.save(transaction);
-                continue;
-            }
-
-            AgentResult result = agent.categorize(normalized, transaction.getOriginalDescription(), transaction.getAmount(), transaction.getUserId());
-            result = validator.validate(result);
+            CategorizationInput input = new CategorizationInput(
+                    transaction.getMerchant(),
+                    normalized,
+                    transaction.getOriginalDescription(), transaction.getAmount(), transaction.getUserId(),
+                    transaction.isBulkImport()
+            );
+            AgentResult result = categorizationService.categorize(input);
 
             if (result != null && result.category() != null) {
                 applyCategory(transaction, result);
-                cacheService.set(normalized, transaction.getUserId(), result);
             } else {
                 incrementAttempts(transaction);
             }
@@ -88,8 +74,8 @@ public class BatchCategorizationProcessor {
 
             if (transaction.getCategory() != null) {
                 projectionService.upsertAll(transaction.getUserId(), transaction.getCategory(),
-                        transaction.getAmount(), transaction.getCreatedAt());
-                embeddingService.saveEmbedding(transaction);
+                        transaction.getAmount(), transaction.getCreatedAt(), transaction.getType());
+                categorizationService.publishCategorized(transaction, null);
             }
         }
 

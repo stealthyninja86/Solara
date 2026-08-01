@@ -1,5 +1,7 @@
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Eye, EyeOff } from "lucide-react";
+import { ThemeToggle } from "./ThemeToggle";
 
 interface Props {
   onLogin: (email: string, password: string) => Promise<void>;
@@ -91,54 +93,32 @@ export function LoginPage({ onLogin, onRegister, error, clearError }: Props) {
   const fe = (name: string) => (touched[name] && fieldErrors[name] ? fieldErrors[name] : null);
 
   return (
-    <div
-      style={{
-        width: "100%",
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <div
-        className="card"
-        style={{
-          maxWidth: "420px",
-          margin: "0 auto",
-          padding: "2.5rem 2rem",
-        }}
-      >
+    <div className="flex min-h-screen w-full items-center justify-center px-4 py-8 sm:px-6">
+      <div className="fixed right-4 top-4 z-50">
+        <ThemeToggle />
+      </div>
+
+      <div className="card w-full max-w-sm px-6 py-8 sm:px-8 sm:py-10">
         <button
           onClick={() => navigate("/")}
-          style={{
-            background: "none",
-            border: "none",
-            color: "#888",
-            cursor: "pointer",
-            fontSize: "0.8rem",
-            padding: 0,
-            marginBottom: "0.75rem",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.3rem",
-            fontFamily: "inherit",
-          }}
+          className="mb-4 flex items-center gap-1 bg-transparent! p-0! text-[0.8rem]! text-[var(--color-text-secondary)]! transition-colors hover:text-[var(--color-text)]!"
         >
-          ← Back
+          {"\u2190"} Back
         </button>
-        <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
-          <div style={{ fontSize: "2.5rem", lineHeight: 1, marginBottom: "0.5rem" }}>☀️</div>
-          <h1 style={{ fontSize: "1.25rem", marginBottom: "0.25rem" }}>Solara</h1>
-          <p style={{ fontSize: "0.75rem", color: "#666" }}>
+
+        <div className="mb-6 text-center">
+          <div className="mb-2 text-4xl">{"\u2600\uFE0F"}</div>
+          <h1 className="text-lg font-bold sm:text-xl">Solara</h1>
+          <p className="mt-1 text-xs" style={{ color: "var(--color-text-muted)" }}>
             {mode === "login" ? "Sign in to your account" : "Create a new account"}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
           {mode === "register" && (
-            <div className="row" style={{ marginBottom: "0.75rem" }}>
-              <div className="form-group" style={{ margin: 0 }}>
-                <label htmlFor="firstName">First Name</label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label htmlFor="firstName" className="text-[0.7rem] font-medium" style={{ color: "var(--color-text-secondary)" }}>First Name</label>
                 <input
                   id="firstName"
                   type="text"
@@ -149,15 +129,17 @@ export function LoginPage({ onLogin, onRegister, error, clearError }: Props) {
                   aria-invalid={!!fe("firstName")}
                   aria-describedby={fe("firstName") ? "firstName-err" : undefined}
                   placeholder="Alice"
+                  className="rounded-md border px-3 py-2 text-sm outline-none transition-colors focus:border-[var(--color-text-secondary)]"
+                  style={{ background: "var(--color-bg)", color: "var(--color-text)", borderColor: "var(--color-border)" }}
                 />
                 {fe("firstName") && (
-                  <p id="firstName-err" role="alert" style={{ fontSize: "0.65rem", color: "#ff4444", marginTop: "0.25rem" }}>
+                  <p id="firstName-err" role="alert" className="text-[0.65rem]" style={{ color: "var(--color-error)" }}>
                     {fe("firstName")}
                   </p>
                 )}
               </div>
-              <div className="form-group" style={{ margin: 0 }}>
-                <label htmlFor="lastName">Last Name</label>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="lastName" className="text-[0.7rem] font-medium" style={{ color: "var(--color-text-secondary)" }}>Last Name</label>
                 <input
                   id="lastName"
                   type="text"
@@ -168,9 +150,11 @@ export function LoginPage({ onLogin, onRegister, error, clearError }: Props) {
                   aria-invalid={!!fe("lastName")}
                   aria-describedby={fe("lastName") ? "lastName-err" : undefined}
                   placeholder="Smith"
+                  className="rounded-md border px-3 py-2 text-sm outline-none transition-colors focus:border-[var(--color-text-secondary)]"
+                  style={{ background: "var(--color-bg)", color: "var(--color-text)", borderColor: "var(--color-border)" }}
                 />
                 {fe("lastName") && (
-                  <p id="lastName-err" role="alert" style={{ fontSize: "0.65rem", color: "#ff4444", marginTop: "0.25rem" }}>
+                  <p id="lastName-err" role="alert" className="text-[0.65rem]" style={{ color: "var(--color-error)" }}>
                     {fe("lastName")}
                   </p>
                 )}
@@ -178,8 +162,8 @@ export function LoginPage({ onLogin, onRegister, error, clearError }: Props) {
             </div>
           )}
 
-          <div className="form-group">
-            <label htmlFor="email">Email</label>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="email" className="text-[0.7rem] font-medium" style={{ color: "var(--color-text-secondary)" }}>Email</label>
             <input
               id="email"
               type="email"
@@ -190,17 +174,19 @@ export function LoginPage({ onLogin, onRegister, error, clearError }: Props) {
               aria-invalid={!!fe("email")}
               aria-describedby={fe("email") ? "email-err" : undefined}
               placeholder="alice@example.com"
+              className="rounded-md border px-3 py-2 text-sm outline-none transition-colors focus:border-[var(--color-text-secondary)]"
+              style={{ background: "var(--color-bg)", color: "var(--color-text)", borderColor: "var(--color-border)" }}
             />
             {fe("email") && (
-              <p id="email-err" role="alert" style={{ fontSize: "0.65rem", color: "#ff4444", marginTop: "0.25rem" }}>
+              <p id="email-err" role="alert" className="text-[0.65rem]" style={{ color: "var(--color-error)" }}>
                 {fe("email")}
               </p>
             )}
           </div>
 
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <div style={{ position: "relative" }}>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="password" className="text-[0.7rem] font-medium" style={{ color: "var(--color-text-secondary)" }}>Password</label>
+            <div className="relative">
               <input
                 id="password"
                 type={showPw ? "text" : "password"}
@@ -211,40 +197,29 @@ export function LoginPage({ onLogin, onRegister, error, clearError }: Props) {
                 aria-invalid={!!fe("password")}
                 aria-describedby={fe("password") ? "pw-err" : undefined}
                 placeholder={mode === "login" ? "Enter password" : "At least 8 characters"}
+                className="w-full rounded-md border px-3 py-2 pr-16 text-sm outline-none transition-colors focus:border-[var(--color-text-secondary)]"
+                style={{ background: "var(--color-bg)", color: "var(--color-text)", borderColor: "var(--color-border)" }}
               />
               <button
                 type="button"
                 onClick={() => setShowPw((v) => !v)}
                 aria-label={showPw ? "Hide password" : "Show password"}
-                style={{
-                  position: "absolute",
-                  right: "8px",
-                  top: "50%",
-                  translate: "0 -50%",
-                  width: "auto",
-                  margin: 0,
-                  padding: "0.25rem 0.4rem",
-                  fontSize: "0.6rem",
-                  background: "transparent",
-                  color: "#888",
-                  border: "1px solid #1e1e1e",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                }}
+                className="absolute right-2 top-[42%] w-auto! -translate-y-1/2 cursor-pointer rounded bg-transparent! p-1! transition-colors hover:bg-[var(--color-bg-hover)]!"
+                style={{ color: "var(--color-text-secondary)" }}
               >
-                {showPw ? "Hide" : "Show"}
+                {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
             {fe("password") && (
-              <p id="pw-err" role="alert" style={{ fontSize: "0.65rem", color: "#ff4444", marginTop: "0.25rem" }}>
+              <p id="pw-err" role="alert" className="text-[0.65rem]" style={{ color: "var(--color-error)" }}>
                 {fe("password")}
               </p>
             )}
           </div>
 
           {mode === "register" && (
-            <div className="form-group">
-              <label htmlFor="confirmPassword">Confirm Password</label>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="confirmPassword" className="text-[0.7rem] font-medium" style={{ color: "var(--color-text-secondary)" }}>Confirm Password</label>
               <input
                 id="confirmPassword"
                 type="password"
@@ -255,9 +230,11 @@ export function LoginPage({ onLogin, onRegister, error, clearError }: Props) {
                 aria-invalid={!!fe("confirmPassword")}
                 aria-describedby={fe("confirmPassword") ? "confirm-err" : undefined}
                 placeholder="Re-enter password"
+                className="rounded-md border px-3 py-2 text-sm outline-none transition-colors focus:border-[var(--color-text-secondary)]"
+                style={{ background: "var(--color-bg)", color: "var(--color-text)", borderColor: "var(--color-border)" }}
               />
               {fe("confirmPassword") && (
-                <p id="confirm-err" role="alert" style={{ fontSize: "0.65rem", color: "#ff4444", marginTop: "0.25rem" }}>
+                <p id="confirm-err" role="alert" className="text-[0.65rem]" style={{ color: "var(--color-error)" }}>
                   {fe("confirmPassword")}
                 </p>
               )}
@@ -265,7 +242,7 @@ export function LoginPage({ onLogin, onRegister, error, clearError }: Props) {
           )}
 
           {error && (
-            <div role="alert" style={{ fontSize: "0.75rem", color: "#ff4444", padding: "0.5rem 0.75rem", background: "rgba(255,68,68,0.08)", border: "1px solid rgba(255,68,68,0.2)", borderRadius: "6px", marginBottom: "0.75rem" }}>
+            <div role="alert" className="rounded-md px-3 py-2 text-[0.75rem]" style={{ color: "var(--color-error)", background: "var(--color-error-bg)", border: "1px solid var(--color-error-border)" }}>
               {error}
             </div>
           )}
@@ -273,12 +250,8 @@ export function LoginPage({ onLogin, onRegister, error, clearError }: Props) {
           <button
             type="submit"
             disabled={loading}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "0.5rem",
-            }}
+            className="mt-1 flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-semibold transition-colors"
+            style={{ background: "var(--color-text)", color: "var(--color-bg)" }}
           >
             {loading ? (
               <span className="spinner spinner--light" />
@@ -290,14 +263,15 @@ export function LoginPage({ onLogin, onRegister, error, clearError }: Props) {
           </button>
         </form>
 
-        <div style={{ textAlign: "center", marginTop: "1.25rem", fontSize: "0.75rem", color: "#666" }}>
+        <div className="mt-4 text-center text-[0.75rem]" style={{ color: "var(--color-text-muted)" }}>
           {mode === "login" ? (
             <>
               Don't have an account?{" "}
               <button
                 type="button"
                 onClick={() => switchMode("register")}
-                style={{ all: "unset", color: "#fff", cursor: "pointer", textDecoration: "underline", width: "auto", margin: 0, fontSize: "0.75rem" }}
+                className="cursor-pointer bg-transparent! p-0! text-[0.75rem]! font-semibold underline transition-colors hover:text-[var(--color-text)]!"
+                style={{ color: "var(--color-text-secondary)" }}
               >
                 Create one
               </button>
@@ -308,7 +282,8 @@ export function LoginPage({ onLogin, onRegister, error, clearError }: Props) {
               <button
                 type="button"
                 onClick={() => switchMode("login")}
-                style={{ all: "unset", color: "#fff", cursor: "pointer", textDecoration: "underline", width: "auto", margin: 0, fontSize: "0.75rem" }}
+                className="cursor-pointer bg-transparent! p-0! text-[0.75rem]! font-semibold underline transition-colors hover:text-[var(--color-text)]!"
+                style={{ color: "var(--color-text-secondary)" }}
               >
                 Sign in
               </button>

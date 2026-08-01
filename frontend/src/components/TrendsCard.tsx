@@ -64,7 +64,7 @@ export function TrendsCard({ refreshKey = 0 }: Props) {
                     key="other"
                     d={describeArc(currentAngle, currentAngle + sweep)}
                     fill="none"
-                    stroke="#555"
+                    stroke="var(--color-text-muted)"
                     strokeWidth={THICKNESS}
                     strokeLinecap="round"
                   />
@@ -76,7 +76,7 @@ export function TrendsCard({ refreshKey = 0 }: Props) {
               x={CX} y={CY}
               textAnchor="middle"
               dominantBaseline="central"
-              fill="#fff"
+              fill="var(--color-text)"
               fontSize="16"
               fontWeight="700"
               fontFamily="'JetBrains Mono', monospace"
@@ -99,7 +99,7 @@ export function TrendsCard({ refreshKey = 0 }: Props) {
             })}
             {categories.length > 8 && (
               <div className="flex items-center gap-1.5 text-[0.6rem]">
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#555", flexShrink: 0 }} />
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--color-text-muted)", flexShrink: 0 }} />
                 <span className="text-neutral-400">Other</span>
                 <span className="text-white">
                   {((categories.slice(8).reduce((s, c) => s + c.total, 0) / totalSpend) * 100).toFixed(0)}%

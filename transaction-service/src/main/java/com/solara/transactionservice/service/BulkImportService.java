@@ -13,6 +13,8 @@ import com.solara.transactionservice.repository.TransactionRepository;
 import com.solara.transactionservice.repository.OutboxRepository;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +33,8 @@ import java.util.regex.Pattern;
 @Service
 public class BulkImportService {
 
+    private static final Logger log = LoggerFactory.getLogger(BulkImportService.class);
+
     private static final List<DateTimeFormatter> DATE_FORMATS = List.of(
             DateTimeFormatter.ofPattern("dd/MM/yyyy"),
             DateTimeFormatter.ofPattern("d/M/yyyy"),
@@ -43,6 +47,9 @@ public class BulkImportService {
     private static final Pattern BALANCE_PATTERN = Pattern.compile("balance|closing", Pattern.CASE_INSENSITIVE);
     private static final Pattern DEBIT_PATTERN = Pattern.compile("withdraw|debit|\\bdr\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern CREDIT_PATTERN = Pattern.compile("deposit|credit|\\bcr\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern DESCRIPTION_VERB_PATTERN = Pattern.compile(
+            "\\b(payment|transfer|sent|received|paid|purchase|refund|charge|fee|interest|credited|debited)\\b",
+            Pattern.CASE_INSENSITIVE);
 
     private final TransactionRepository transactionRepository;
     private final OutboxRepository outboxRepository;
@@ -69,56 +76,82 @@ public class BulkImportService {
     @Transactional
     public void processCsvImport(UUID jobId, UUID userId, InputStream csvContent) throws IOException {
         List<CSVRecord> records = CSVFormat.DEFAULT.builder()
-                .setHeader()
-                .setSkipHeaderRecord(true)
                 .setTrim(true)
                 .setIgnoreEmptyLines(true)
                 .build()
                 .parse(new InputStreamReader(csvContent))
                 .getRecords();
 
-        ColumnRole[] roles = classifyColumns(records);
-        List<Transaction> transactions = new ArrayList<>(records.size());
+        int headerIndex = -1;
+        for (int i = 0; i < records.size(); i++) {
+            if (isHeaderRow(records.get(i))) {
+                headerIndex = i;
+                break;
+            }
+        }
+        if (headerIndex < 0) {
+            log.warn("No header row found in CSV for job={}; skipping import", jobId);
+            return;
+        }
 
-        for (CSVRecord record : records) {
-            String narration = valueAt(record, roles, ColumnRole.NARRATION);
-            if (narration.isEmpty()) continue;
+        ColumnRole[] roles = classifyColumns(records.get(headerIndex),
+                records.subList(headerIndex + 1, records.size()));
+        List<Transaction> transactions = new ArrayList<>(records.size() - headerIndex - 1);
+
+        for (int i = headerIndex + 1; i < records.size(); i++) {
+            CSVRecord record = records.get(i);
+            String narration = valueAt(record, roles, ColumnRole.DESCRIPTION);
+            if (narration.isEmpty()) narration = valueAt(record, roles, ColumnRole.NARRATION);
+            String merchant = valueAt(record, roles, ColumnRole.MERCHANT);
+            if (narration.isEmpty() && merchant.isEmpty()) continue;
 
             BigDecimal debit = parseDecimal(valueAt(record, roles, ColumnRole.DEBIT));
             BigDecimal credit = parseDecimal(valueAt(record, roles, ColumnRole.CREDIT));
             BigDecimal amount = parseDecimal(valueAt(record, roles, ColumnRole.AMOUNT));
 
-            PaymentMode mode = detectPaymentMode(narration);
+            boolean hasDebitCreditColumn = hasRole(roles, ColumnRole.DEBIT) || hasRole(roles, ColumnRole.CREDIT);
+            PaymentMode mode = detectPaymentMode(narration.isEmpty() ? merchant : narration);
             if (debit != null && debit.signum() > 0) {
-                transactions.add(new Transaction(userId, debit, narration, null, mode, TransactionType.DEBIT, true));
+                transactions.add(new Transaction(userId, debit, narration, merchant, mode, TransactionType.DEBIT, true));
             } else if (credit != null && credit.signum() > 0) {
-                transactions.add(new Transaction(userId, credit, narration, null, mode, TransactionType.CREDIT, true));
+                transactions.add(new Transaction(userId, credit, narration, merchant, mode, TransactionType.CREDIT, true));
             } else if (amount != null) {
-                transactions.add(new Transaction(userId, amount.abs(), narration, null, mode,
-                        amount.signum() >= 0 ? TransactionType.CREDIT : TransactionType.DEBIT, true));
+                transactions.add(new Transaction(userId, amount.abs(), narration, merchant, mode,
+                        hasDebitCreditColumn
+                                ? (amount.signum() >= 0 ? TransactionType.CREDIT : TransactionType.DEBIT)
+                                : TransactionType.DEBIT, true));
             }
         }
         save(jobId, transactions);
     }
 
-    private ColumnRole[] classifyColumns(List<CSVRecord> records) {
-        int columns = records.isEmpty() ? 0 : records.get(0).size();
-        List<CSVRecord> sample = records.subList(0, Math.min(records.size(), 10));
+    private boolean isHeaderRow(CSVRecord record) {
+        int matches = 0;
+        for (String value : record) {
+            String v = value.toLowerCase();
+            if (v.contains("date") || v.contains("narration") || v.contains("chq")
+                    || v.contains("ref") || v.contains("cheque") || v.contains("withdraw")
+                    || v.contains("debit") || v.contains("deposit") || v.contains("credit")
+                    || v.contains("balance") || v.contains("closing") || v.contains("merchant")
+                    || v.contains("amount") || v.contains("paymentmode") || v.contains("description")) {
+                matches++;
+            }
+        }
+        return matches >= 2;
+    }
+
+    private ColumnRole[] classifyColumns(CSVRecord header, List<CSVRecord> dataRecords) {
+        int columns = header.size();
+        List<CSVRecord> sample = dataRecords.subList(0, Math.min(dataRecords.size(), 10));
         ColumnRole[] roles = new ColumnRole[columns];
-        String[] headers = records.isEmpty() ? new String[0]
-                : records.get(0).getParser().getHeaderNames().toArray(new String[0]);
 
         for (int col = 0; col < columns; col++) {
-            String header = col < headers.length ? headers[col] : "";
-            if (header.toLowerCase().contains("date") || header.toLowerCase().contains("dt")) {
-                roles[col] = ColumnRole.DATE;
-            } else if (header.toLowerCase().contains("chq") || header.toLowerCase().contains("ref") || header.toLowerCase().contains("cheque")) {
-                roles[col] = ColumnRole.REF_NO;
-            } else if (DEBIT_PATTERN.matcher(header).find()) {
+            String headerValue = col < header.size() ? header.get(col).toLowerCase() : "";
+            if (DEBIT_PATTERN.matcher(headerValue).find()) {
                 roles[col] = ColumnRole.DEBIT;
-            } else if (CREDIT_PATTERN.matcher(header).find()) {
+            } else if (CREDIT_PATTERN.matcher(headerValue).find()) {
                 roles[col] = ColumnRole.CREDIT;
-            } else if (BALANCE_PATTERN.matcher(header).find()) {
+            } else if (BALANCE_PATTERN.matcher(headerValue).find()) {
                 roles[col] = ColumnRole.BALANCE;
             }
         }
@@ -141,20 +174,33 @@ public class BulkImportService {
         }
         if (values.size() < 2) return ColumnRole.UNKNOWN;
 
-        boolean allDate = true, allRef = true, allText = true, allNumeric = true;
-        for (String v : values) {
-            if (!isDate(v)) allDate = false;
-            if (!v.matches("\\d{10,16}")) allRef = false;
-            if (v.length() <= 15 || v.matches("[\\d.,\\-+]+")) allText = false;
-            if (parseDecimal(v) == null) allNumeric = false;
+        if (values.stream().allMatch(BulkImportService::isDate)) return ColumnRole.DATE;
+        if (values.stream().allMatch(v -> v.matches("\\d{10,16}"))) return ColumnRole.REF_NO;
+
+        boolean anyText = values.stream().anyMatch(BulkImportService::isTextValue);
+        if (!anyText) {
+            if (values.stream().allMatch(v -> parseDecimal(v) != null)) return ColumnRole.AMOUNT;
+            return ColumnRole.UNKNOWN;
         }
 
-        if (allDate) return ColumnRole.DATE;
-        if (allRef) return ColumnRole.REF_NO;
-        if (allText) return ColumnRole.NARRATION;
-        if (allNumeric) return ColumnRole.AMOUNT;
-        if (values.stream().anyMatch(v -> v.length() > 10)) return ColumnRole.NARRATION;
-        return ColumnRole.UNKNOWN;
+        if (values.stream().anyMatch(BulkImportService::isDescriptionLike)) return ColumnRole.DESCRIPTION;
+        if (values.stream().allMatch(BulkImportService::isMerchantLike)) return ColumnRole.MERCHANT;
+        return ColumnRole.NARRATION;
+    }
+
+    private static boolean isTextValue(String value) {
+        return value.matches(".*\\p{L}.*") && parseDecimal(value) == null;
+    }
+
+    private static boolean isDescriptionLike(String value) {
+        return value.length() > 25 || DESCRIPTION_VERB_PATTERN.matcher(value).find();
+    }
+
+    private static boolean isMerchantLike(String value) {
+        return value.length() >= 3
+                && value.length() <= 40
+                && value.matches("[\\p{L}\\p{N}.&'\\- ]+")
+                && !DESCRIPTION_VERB_PATTERN.matcher(value).find();
     }
 
     private static boolean isDate(String value) {
@@ -170,6 +216,13 @@ public class BulkImportService {
             if (roles[i] == role && i < record.size()) return record.get(i);
         }
         return "";
+    }
+
+    private static boolean hasRole(ColumnRole[] roles, ColumnRole role) {
+        for (ColumnRole candidate : roles) {
+            if (candidate == role) return true;
+        }
+        return false;
     }
 
     private void save(UUID jobId, List<Transaction> transactions) {

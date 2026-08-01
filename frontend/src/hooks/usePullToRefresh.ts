@@ -31,12 +31,23 @@ export function usePullToRefresh(
       return MAX * (1 - Math.exp((-k * y) / MAX));
     }
 
+    function getThemeVars() {
+      const s = getComputedStyle(document.documentElement);
+      return {
+        surface: s.getPropertyValue("--color-surface").trim(),
+        border: s.getPropertyValue("--color-border").trim(),
+        textMuted: s.getPropertyValue("--color-text-muted").trim(),
+        text: s.getPropertyValue("--color-text").trim(),
+      };
+    }
+
     function addIndicator(distance: number) {
       if (!indicatorEl) {
+        const t = getThemeVars();
         indicatorEl = document.createElement("div");
         indicatorEl.className =
           "fixed top-0 left-0 right-0 z-50 flex justify-center pointer-events-none";
-        indicatorEl.innerHTML = `<div style="background:#0e0e0e;border:1px solid #1e1e1e;border-radius:999px;padding:0.4rem 0.75rem;display:flex;align-items:center;gap:0.5rem"><div style="width:12px;height:12px;border:2px solid rgba(255,255,255,0.15);border-top-color:transparent;border-radius:50%"></div><span style="font-size:0.65rem;color:#a3a3a3">\u21C5 Pull to refresh</span></div>`;
+        indicatorEl.innerHTML = `<div style="background:${t.surface};border:1px solid ${t.border};border-radius:999px;padding:0.4rem 0.75rem;display:flex;align-items:center;gap:0.5rem"><div style="width:12px;height:12px;border:2px solid ${t.textMuted}33;border-top-color:transparent;border-radius:50%"></div><span style="font-size:0.65rem;color:${t.textMuted}">\u21C5 Pull to refresh</span></div>`;
         document.body.appendChild(indicatorEl);
       }
       const snapped = Math.min(distance, activeThreshold);
@@ -44,9 +55,10 @@ export function usePullToRefresh(
       const spinner = inner.firstChild as HTMLElement;
       const label = inner.lastChild as HTMLElement;
       if (distance >= activeThreshold) {
+        const t = getThemeVars();
         label.textContent = "\u21C5 Release to refresh";
         spinner.style.animation = "spin 0.6s linear infinite";
-        spinner.style.borderTopColor = "#ffffff";
+        spinner.style.borderTopColor = t.text;
       } else {
         label.textContent = "\u21C5 Pull to refresh";
         spinner.style.animation = "none";

@@ -1,20 +1,22 @@
-# service categorizer
+# Solara
 
-## what it does?
-categorizes the service names to categorizes using RAG piplines
+AI-powered personal finance intelligence platform.
 
-Example: 
+95% of finance apps show you *what happened*. This one tells you **what to do about it**.
 
-Input: 
+## Core API
 
-Netflix
-15.99 EUR
+```
+POST /api/v1/categorize
+Input:  Netflix | 15.99 EUR
+Output: Entertainment | 98% confidence
+```
 
-Output:
+Strategy pattern: RuleBasedStrategy → LLMStrategy → RAGStrategy → CacheStrategy → FallbackStrategy
 
-Category:
-Entertainment
+## Beyond categorization
 
-Confidence:
-98%
-netflix 
+- **Actionable insights**: *"Switch from Brand A to Brand B, save $40/month"*
+- **Subscription audit**: Unused subscriptions detected automatically
+- **Safe-to-spend**: What you can actually afford right now
+- **Budget alerts**: Store-level overspend detection 

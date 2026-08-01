@@ -69,14 +69,11 @@ export function useTransactions() {
 
   async function handleDelete(id: string) {
     try {
-      const response = await api(`/api/v1/category/transaction/${id}`, {
+      const response = await api(`/api/v1/transactions/${id}`, {
         method: "DELETE",
       });
       if (response.ok) {
-        setTransactions((prev) => prev.filter((transaction) => transaction.transactionId !== id));
-        if (detailTransaction?.transactionId === id) {
-          setDetailTransaction(null);
-        }
+        window.location.reload();
       }
     } catch {
       // silent
