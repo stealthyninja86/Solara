@@ -1,0 +1,138 @@
+{
+  "uid": "solara-overview",
+  "title": "Solara Overview",
+  "tags": ["solara"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "editable": true,
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP Request Rate (rps)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (application) (rate(http_server_requests_seconds_count[1m]))",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "HTTP 5xx Error Rate (%)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (application) (rate(http_server_requests_seconds_count{status=~\"5..\"}[1m])) / clamp_min(sum by (application) (rate(http_server_requests_seconds_count[1m])), 0.0001) * 100",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "JVM Heap Used (MB)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (application) (jvm_memory_used_bytes{area=\"heap\"}) / 1024 / 1024",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "CPU Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "system_cpu_usage",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Categorization Duration p95 (s) by Strategy",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, strategy) (rate(solara_llm_categorization_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{strategy}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Categorization Outcomes (rate) by Strategy",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (strategy, outcome) (rate(solara_categorization_outcome_total[1m]))",
+          "legendFormat": "{{strategy}} - {{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Import Jobs & Rows",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (rate(solara_import_jobs_total[5m]))",
+          "legendFormat": "jobs {{outcome}}"
+        },
+        {
+          "expr": "sum by (outcome) (rate(solara_import_rows_total[5m]))",
+          "legendFormat": "rows {{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "DLQ Depth & Kafka Consumer Lag",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "solara_dlq_depth",
+          "legendFormat": "DLQ depth"
+        },
+        {
+          "expr": "sum by (client_id) (kafka_consumer_fetch_manager_records_lag)",
+          "legendFormat": "lag {{client_id}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Circuit Breaker State (gateway)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "resilience4j_circuitbreaker_state{state=\"open\"}",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    }
+  ]
+}
