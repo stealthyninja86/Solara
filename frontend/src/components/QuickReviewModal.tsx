@@ -1,5 +1,6 @@
 import type { CategorizedTransactionResponse, TransactionResponse } from "../types";
 import { Modal } from "./Modal";
+import { Icon } from "./Icon";
 
 interface Props {
   visible: boolean;
@@ -16,7 +17,7 @@ export function QuickReviewModal({
 }: Props) {
   return (
     <Modal visible={visible} onClose={onLooksGood} titleId="review-modal-title" className="modal modal-detail">
-      <h2 id="review-modal-title">Review Transaction</h2>
+      <h2 id="review-modal-title"><Icon name="review-transaction" size={16} /> Review Transaction</h2>
       <p className="modal-hint">Categorization result for your transaction</p>
 
       <div className="detail-field">

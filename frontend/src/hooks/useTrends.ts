@@ -8,14 +8,16 @@ interface TrendCategory {
   total: number;
 }
 
-export function useTrends(refreshKey = 0) {
+export function useTrends(refreshKey = 0, month?: number, year?: number) {
   const [categories, setCategories] = useState<TrendCategory[]>([]);
   const [totalSpend, setTotalSpend] = useState(0);
 
   const fetchTrends = useCallback(async () => {
     const now = new Date();
-    const from = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
-    const to = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0));
+    const m = month ?? now.getMonth();
+    const y = year ?? now.getFullYear();
+    const from = new Date(Date.UTC(y, m, 1));
+    const to = new Date(Date.UTC(y, m + 1, 0));
     const params = new URLSearchParams({
       userId: getUserId() ?? DEFAULT_USER_ID,
       from: from.toISOString().slice(0, 10),
@@ -35,7 +37,7 @@ export function useTrends(refreshKey = 0) {
     } catch {
       // silent
     }
-  }, []);
+  }, [month, year]);
 
   useEffect(() => {
     fetchTrends();

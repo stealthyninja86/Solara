@@ -9,7 +9,11 @@ interface SpendData {
   safeToSpend: number;
 }
 
-export function useSpendAnalysis(refreshKey = 0) {
+function toIsoDate(year: number, month: number): string {
+  return `${year}-${String(month + 1).padStart(2, "0")}-01`;
+}
+
+export function useSpendAnalysis(refreshKey = 0, month?: number, year?: number) {
   const [data, setData] = useState<SpendData>({
     totalSpent: 0,
     monthlyBudget: 0,
@@ -17,7 +21,11 @@ export function useSpendAnalysis(refreshKey = 0) {
   });
 
   const fetchAnalysis = useCallback(async () => {
-    const params = new URLSearchParams({ userId: getUserId() ?? DEFAULT_USER_ID });
+    const now = new Date();
+    const m = month ?? now.getMonth();
+    const y = year ?? now.getFullYear();
+    const at = toIsoDate(y, m);
+    const params = new URLSearchParams({ userId: getUserId() ?? DEFAULT_USER_ID, at });
     try {
       const [budgetRes, safeRes] = await Promise.all([
         api(`/api/v1/insights/budget?${params}`),
@@ -35,7 +43,7 @@ export function useSpendAnalysis(refreshKey = 0) {
     } catch {
       // silent
     }
-  }, []);
+  }, [month, year]);
 
   useEffect(() => {
     fetchAnalysis();

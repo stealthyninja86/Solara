@@ -1,17 +1,20 @@
 import { useState } from "react";
 import { useBudget } from "../hooks/useBudget";
 import { Modal } from "./Modal";
+import { Icon } from "./Icon";
 
 interface Props {
   refreshKey?: number;
   onBudgetUpdated?: () => void;
+  month?: number;
+  year?: number;
 }
 
-export function BudgetCard({ refreshKey = 0, onBudgetUpdated }: Props) {
+export function BudgetCard({ refreshKey = 0, onBudgetUpdated, month, year }: Props) {
   const {
     monthlyBudget, totalSpent, remaining,
     hasBudget, exceeded, setMonthlyBudget,
-  } = useBudget(refreshKey);
+  } = useBudget(refreshKey, month, year);
 
   const [showInput, setShowInput] = useState(false);
   const [inputValue, setInputValue] = useState(String(monthlyBudget || ""));
@@ -56,7 +59,7 @@ export function BudgetCard({ refreshKey = 0, onBudgetUpdated }: Props) {
 
   return (
     <div className="card budget-card h-full">
-      <h2>Budget</h2>
+      <h2><Icon name="budget" size={16} /> Budget</h2>
 
       <div
         className="budget-ring-wrapper"
@@ -162,8 +165,8 @@ export function BudgetCard({ refreshKey = 0, onBudgetUpdated }: Props) {
 
       {showModal && (
         <Modal visible={showModal} onClose={() => setShowExceeded(false)} titleId="budget-exceeded-title" className="modal modal-success">
-          <div className="success-icon" style={{ fontSize: "2.5rem" }}>{'\u26A0\uFE0F'}</div>
-          <h2 id="budget-exceeded-title">Budget Exceeded</h2>
+          <div className="success-icon" style={{ fontSize: "2.5rem" }}><Icon name="budget-exceeded" size={40} /></div>
+          <h2 id="budget-exceeded-title"><Icon name="budget-exceeded" size={16} /> Budget Exceeded</h2>
           <p className="success-message">
             Your budget of {'\u20B9'}{monthlyBudget.toFixed(0)} has been exceeded for this month.
           </p>

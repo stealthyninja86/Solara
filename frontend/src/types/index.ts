@@ -62,3 +62,10 @@ export interface PageResponse {
   number: number;
   size: number;
 }
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}

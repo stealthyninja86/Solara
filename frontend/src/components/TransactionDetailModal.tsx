@@ -2,6 +2,7 @@ import type { CategorizedTransactionResponse, TransactionCategory } from "../typ
 import { SUGGESTED_CATEGORIES } from "../constants";
 import { categoryWithEmoji } from "../utils";
 import { Modal } from "./Modal";
+import { Icon } from "./Icon";
 
 interface DetailState {
   detailTransaction: CategorizedTransactionResponse | null;
@@ -23,7 +24,7 @@ export function TransactionDetailModal({ detail }: { detail: DetailState }) {
 
   return (
     <Modal visible={visible} onClose={handleClose} titleId="detail-modal-title" className="modal modal-detail">
-      <h2 id="detail-modal-title">Transaction Details</h2>
+      <h2 id="detail-modal-title"><Icon name="transaction-details" size={16} /> Transaction Details</h2>
 
       <div className="detail-field">
         <span className="label">Transaction ID</span>

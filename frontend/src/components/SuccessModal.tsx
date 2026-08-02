@@ -1,5 +1,6 @@
 import type { TransactionResponse } from "../types";
 import { Modal } from "./Modal";
+import { Icon } from "./Icon";
 
 interface Props {
   visible: boolean;
@@ -20,7 +21,7 @@ export function SuccessModal({ visible, createdTransaction, onDone }: Props) {
         {'\u2715'}
       </button>
       <div className="success-icon">{'\u2705'}</div>
-      <h2 id="success-modal-title">Transaction Submitted</h2>
+      <h2 id="success-modal-title"><Icon name="success" size={16} /> Transaction Submitted</h2>
       <p className="success-message">
         Your transaction has been entered successfully.
       </p>

@@ -19,6 +19,7 @@ export function useTransactions() {
   const [updatedAtFrom, setUpdatedAtFrom] = useState("");
   const [updatedUI, setUpdatedUI] = useState<"idle" | "from">("idle");
   const [dateFilterKey, setDateFilterKey] = useState(0);
+  const [bulkImportFilter, setBulkImportFilter] = useState<boolean | null>(null);
   const [detailTransaction, setDetailTransaction] = useState<CategorizedTransactionResponse | null>(null);
   const [editMerchant, setEditMerchant] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -46,6 +47,7 @@ export function useTransactions() {
       else if (categoryFilter) params.set("category", categoryFilter);
       if (paymentFilter) params.set("paymentMode", paymentFilter);
       if (updatedAtFrom) params.set("updatedAtFrom", updatedAtFrom);
+      if (bulkImportFilter !== null) params.set("bulkImport", String(bulkImportFilter));
       const response = await api(
         `/api/v1/category/transaction?${params}`
       );
@@ -61,7 +63,7 @@ export function useTransactions() {
       setListLoading(false);
       setPullRefreshing(false);
     }
-  }, [sortBy, sortDir, categoryFilter, paymentFilter, updatedAtFrom, dateFilterKey, pageSize]);
+  }, [sortBy, sortDir, categoryFilter, paymentFilter, updatedAtFrom, dateFilterKey, pageSize, bulkImportFilter]);
 
   useEffect(() => {
     fetchTransactions(0);
@@ -137,6 +139,7 @@ export function useTransactions() {
     dateFrom, setDateFrom, dateTo, setDateTo, dateUI, setDateUI,
     updatedAtFrom, setUpdatedAtFrom, updatedUI, setUpdatedUI,
     dateFilterKey, setDateFilterKey,
+    bulkImportFilter, setBulkImportFilter,
     detailTransaction, setDetailTransaction,
     editMerchant, setEditMerchant,
     editDescription, setEditDescription,

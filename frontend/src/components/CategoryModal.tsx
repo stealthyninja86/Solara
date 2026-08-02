@@ -1,6 +1,7 @@
 import type { TransactionCategory } from "../types";
 import { SUGGESTED_CATEGORIES } from "../constants";
 import { Modal } from "./Modal";
+import { Icon } from "./Icon";
 
 interface Props {
   visible: boolean;
@@ -17,7 +18,7 @@ export function CategoryModal({
 }: Props) {
   return (
     <Modal visible={visible} onClose={onClose} titleId="category-modal-title">
-      <h2 id="category-modal-title">Categorize Transaction</h2>
+      <h2 id="category-modal-title"><Icon name="category-breakdown" size={16} /> Categorize Transaction</h2>
       <p className="modal-hint">This transaction needs review. Assign a category:</p>
       <div className="category-grid">
         {SUGGESTED_CATEGORIES.map((suggestion) => (

@@ -1,6 +1,7 @@
 import type { CategorizedTransactionResponse } from "../types";
 import { SUGGESTED_CATEGORIES, PAYMENT_MODES } from "../constants";
 import { categoryWithEmoji, formatDate } from "../utils";
+import { Icon } from "./Icon";
 
 interface TransactionsState {
   transactions: CategorizedTransactionResponse[];
@@ -37,7 +38,7 @@ export function TransactionTable({ state, onDelete }: { state: TransactionsState
     return (
       <div className="card">
         <div className="flex items-center justify-between">
-          <h2>All Transactions</h2>
+          <h2><Icon name="transactions" size={14} /> All Transactions</h2>
           <div className="flex items-center gap-1.5">
             <span className="text-[0.65rem] text-neutral-500">Rows:</span>
             <select
@@ -59,7 +60,7 @@ export function TransactionTable({ state, onDelete }: { state: TransactionsState
   return (
     <div className="card">
       <div className="flex items-center justify-between">
-        <h2>All Transactions</h2>
+        <h2><Icon name="transactions" size={14} /> All Transactions</h2>
         <div className="flex items-center gap-1.5">
           <span className="text-[0.65rem] text-neutral-500">Rows:</span>
           <select
