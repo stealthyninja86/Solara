@@ -43,20 +43,35 @@ mkdir -p auth-service/auth-service-db
 chown 999:999 auth-service/auth-service-db          # postgres official image uid
 mkdir -p data/uploads/tmp                            # multipart upload location
 
-# --- 5. build + start the stack (Maven builds inside the images; slow first run) ---
+# --- 5. JWT keys: generated per deployment, never committed ---------------------
+# auth-service signs JWTs (private.pem), the gateway verifies (public.pem). The
+# keys are untracked in git (the repo only carries the Dockerfiles), so a fresh
+# clone has no key files and the api-gateway image build fails at its
+# COPY src/main/resources/keys/public.pem (seen live). Generate the pair
+# together on first boot so both services always share a matching pair, and
+# never land in the repo — committing private.pem would let anyone forge tokens.
+mkdir -p auth-service/src/main/resources/keys api-gateway/src/main/resources/keys
+if [ ! -f auth-service/src/main/resources/keys/private.pem ]; then
+  openssl genrsa -out auth-service/src/main/resources/keys/private.pem 2048
+  openssl rsa -in auth-service/src/main/resources/keys/private.pem -pubout \
+    -out auth-service/src/main/resources/keys/public.pem
+fi
+cp auth-service/src/main/resources/keys/public.pem api-gateway/src/main/resources/keys/public.pem
+
+# --- 6. build + start the stack (Maven builds inside the images; slow first run) ---
 docker compose up -d --build
 
-# --- 6. frontend static build (nginx serves dist/, proxies /api) ---
+# --- 7. frontend static build (nginx serves dist/, proxies /api) ---
 npm --prefix frontend ci
 npm --prefix frontend run build
 
-# --- 7. nginx: repo config replaces the default site (port 80 conflict) ---
+# --- 8. nginx: repo config replaces the default site (port 80 conflict) ---
 install -m 0644 infrastructure/demo/nginx.conf /etc/nginx/conf.d/solara.conf
 rm -f /etc/nginx/conf.d/default.conf
 nginx -t
 systemctl enable --now nginx
 
-# --- 8. boot persistence: user-data runs ONCE; this unit re-ups the stack on every start ---
+# --- 9. boot persistence: user-data runs ONCE; this unit re-ups the stack on every start ---
 cat > /etc/systemd/system/solara-stack.service <<'EOF'
 [Unit]
 Description=Solara docker-compose stack
@@ -75,7 +90,7 @@ WantedBy=multi-user.target
 EOF
 systemctl enable solara-stack.service
 
-# --- 9. ssh user (make deploy / make ssh) can use docker + write the repo ---
+# --- 10. ssh user (make deploy / make ssh) can use docker + write the repo ---
 usermod -aG docker ec2-user
 chown -R ec2-user:ec2-user /srv/solara
 
