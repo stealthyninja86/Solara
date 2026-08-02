@@ -64,12 +64,12 @@ public class ProjectionService {
         return YearMonth.now().atDay(1);
     }
 
-    public BigDecimal sumTotalSpent(UUID userId) {
-        return projectionRepository.sumTotalAmountByPeriod(userId, currentMonthStart());
+    public BigDecimal sumTotalSpent(UUID userId, LocalDate monthStart) {
+        return projectionRepository.sumTotalAmountByPeriod(userId, monthStart);
     }
 
-    public Optional<BigDecimal> getMonthlyBudget(UUID userId) {
-        return projectionRepository.findMonthlyBudget(userId, currentMonthStart());
+    public Optional<BigDecimal> getMonthlyBudget(UUID userId, LocalDate monthStart) {
+        return projectionRepository.findMonthlyBudget(userId, monthStart);
     }
 
     @Transactional
@@ -77,16 +77,31 @@ public class ProjectionService {
         projectionRepository.upsertBudget(UUID.randomUUID(), userId, currentMonthStart(), budget);
     }
 
-    public BigDecimal calculateSafeToSpend(UUID userId) {
-        YearMonth thisMonth = YearMonth.now();
-        Instant monthStart = thisMonth.atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-        Instant monthEnd = thisMonth.plusMonths(1).atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+    public Optional<BigDecimal> getMonthlyIncome(UUID userId) {
+        return projectionRepository.findMonthlyIncome(userId, currentMonthStart());
+    }
+
+    @Transactional
+    public void setMonthlyIncome(UUID userId, BigDecimal income) {
+        projectionRepository.upsertIncome(UUID.randomUUID(), userId, currentMonthStart(), income);
+    }
+
+    public BigDecimal calculateSafeToSpend(UUID userId, LocalDate at) {
+        LocalDate targetMonth = at != null ? at.withDayOfMonth(1) : YearMonth.now().atDay(1);
+        YearMonth ym = YearMonth.from(targetMonth);
+        Instant monthStart = ym.atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant monthEnd = ym.plusMonths(1).atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
 
         BigDecimal expenses = transactionRepository.sumAmountByUserAndTypeAndPeriod(userId, "DEBIT", monthStart, monthEnd);
 
-        Optional<BigDecimal> budget = getMonthlyBudget(userId);
+        Optional<BigDecimal> budget = getMonthlyBudget(userId, targetMonth);
         if (budget.isPresent() && budget.get().compareTo(BigDecimal.ZERO) > 0) {
             return budget.get().subtract(expenses);
+        }
+
+        Optional<BigDecimal> storedIncome = getMonthlyIncome(userId);
+        if (storedIncome.isPresent() && storedIncome.get().compareTo(BigDecimal.ZERO) > 0) {
+            return storedIncome.get().subtract(expenses);
         }
 
         BigDecimal income = transactionRepository.sumAmountByUserAndTypeAndPeriod(userId, "CREDIT", monthStart, monthEnd);

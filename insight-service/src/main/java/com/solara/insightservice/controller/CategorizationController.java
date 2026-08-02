@@ -50,12 +50,13 @@ public class CategorizationController {
             @RequestParam(required = false) BigDecimal amountMax,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate updatedAtFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate updatedAtTo,
+            @RequestParam(required = false) Boolean bulkImport,
             @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        log.debug("list requested: userId={}, needsReview={}, category={}, page={}, size={}",
-                userId, needsReview, category, pageable.getPageNumber(), pageable.getPageSize());
+        log.debug("list requested: userId={}, needsReview={}, category={}, bulkImport={}, page={}, size={}",
+                userId, needsReview, category, bulkImport, pageable.getPageNumber(), pageable.getPageSize());
         Page<CategorizedTransaction> page = queryService.list(
                 userId, needsReview, category, dateFrom, dateTo,
-                paymentMode, amountMin, amountMax, updatedAtFrom, updatedAtTo, pageable);
+                paymentMode, amountMin, amountMax, updatedAtFrom, updatedAtTo, bulkImport, pageable);
         log.debug("list returned: userId={}, totalElements={}", userId, page.getTotalElements());
         return ResponseEntity.ok(page.map(CategorizedTransactionResponse::from));
     }

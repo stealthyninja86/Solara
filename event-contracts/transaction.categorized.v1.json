@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "transaction.categorized.v1",
+  "type": "object",
+  "required": ["eventId", "eventVersion", "eventType", "occurredAt", "payload"],
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "eventVersion": { "const": "1" },
+    "eventType": { "const": "transaction.categorized.v1" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "payload": {
+      "type": "object",
+      "required": ["transactionId", "userId", "merchant", "category", "method"],
+      "properties": {
+        "transactionId": { "type": "string", "format": "uuid" },
+        "userId": { "type": "string", "format": "uuid" },
+        "merchant": { "type": "string" },
+        "normalizedMerchant": { "type": ["string", "null"] },
+        "description": { "type": ["string", "null"] },
+        "category": { "type": "string" },
+        "confidence": { "type": ["number", "null"] },
+        "method": { "type": "string" },
+        "previousMerchant": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

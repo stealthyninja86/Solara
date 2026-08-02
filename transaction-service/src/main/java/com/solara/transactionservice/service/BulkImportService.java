@@ -11,6 +11,7 @@ import com.solara.transactionservice.outbox.OutboxEntity;
 import com.solara.transactionservice.repository.ImportJobRepository;
 import com.solara.transactionservice.repository.TransactionRepository;
 import com.solara.transactionservice.repository.OutboxRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVRecord;
 import org.slf4j.Logger;
@@ -54,13 +55,16 @@ public class BulkImportService {
     private final TransactionRepository transactionRepository;
     private final OutboxRepository outboxRepository;
     private final ImportJobRepository importJobRepository;
+    private final MeterRegistry meterRegistry;
 
     public BulkImportService(TransactionRepository transactionRepository,
                              OutboxRepository outboxRepository,
-                             ImportJobRepository importJobRepository) {
+                             ImportJobRepository importJobRepository,
+                             MeterRegistry meterRegistry) {
         this.transactionRepository = transactionRepository;
         this.outboxRepository = outboxRepository;
         this.importJobRepository = importJobRepository;
+        this.meterRegistry = meterRegistry;
     }
 
     @Async
@@ -226,17 +230,25 @@ public class BulkImportService {
     }
 
     private void save(UUID jobId, List<Transaction> transactions) {
-        ImportJob job = importJobRepository.findById(jobId)
-                .orElseThrow(() -> new IllegalArgumentException("Import job not found: " + jobId));
-        job.setStatus(ImportJobStatus.PROCESSING);
-        importJobRepository.save(job);
-        transactionRepository.saveAll(transactions);
-        outboxRepository.saveAll(transactions.stream().map(OutboxEntity::forTransaction).toList());
-        job.setStatus(ImportJobStatus.COMPLETED);
-        job.setImportedRows(transactions.size());
-        job.setCompletedAt(Instant.now());
-        importJobRepository.save(job);
-        outboxRepository.save(OutboxEntity.forBulkImportCompletion(job, transactions.size(), 0));
+        try {
+            ImportJob job = importJobRepository.findById(jobId)
+                    .orElseThrow(() -> new IllegalArgumentException("Import job not found: " + jobId));
+            job.setStatus(ImportJobStatus.PROCESSING);
+            importJobRepository.save(job);
+            transactionRepository.saveAll(transactions);
+            outboxRepository.saveAll(transactions.stream().map(OutboxEntity::forTransaction).toList());
+            job.setStatus(ImportJobStatus.COMPLETED);
+            job.setImportedRows(transactions.size());
+            job.setCompletedAt(Instant.now());
+            importJobRepository.save(job);
+            outboxRepository.save(OutboxEntity.forBulkImportCompletion(job, transactions.size(), 0));
+
+            meterRegistry.counter("solara.import.jobs", "outcome", "completed").increment();
+            meterRegistry.counter("solara.import.rows", "outcome", "imported").increment(transactions.size());
+        } catch (Exception e) {
+            meterRegistry.counter("solara.import.jobs", "outcome", "failed").increment();
+            throw e;
+        }
     }
 
     private static BigDecimal parseDecimal(String raw) {

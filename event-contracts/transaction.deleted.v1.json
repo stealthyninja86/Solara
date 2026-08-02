@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "transaction.deleted.v1",
+  "type": "object",
+  "required": ["eventId", "eventVersion", "eventType", "occurredAt", "payload"],
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "eventVersion": { "const": "1" },
+    "eventType": { "const": "transaction.deleted.v1" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "payload": {
+      "type": "object",
+      "required": ["transactionId", "userId"],
+      "properties": {
+        "transactionId": { "type": "string", "format": "uuid" },
+        "userId": { "type": "string", "format": "uuid" }
+      }
+    }
+  }
+}

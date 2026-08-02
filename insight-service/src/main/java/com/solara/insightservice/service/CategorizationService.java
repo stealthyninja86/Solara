@@ -15,6 +15,8 @@ import com.solara.insightservice.service.strategy.categorization.CategorizationS
 import com.solara.insightservice.service.strategy.categorization.CategoryValidator;
 import com.solara.insightservice.service.strategy.categorization.MerchantCache;
 import com.solara.insightservice.service.strategy.categorization.RAGContextRetriever;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -58,6 +60,7 @@ public class CategorizationService {
     private final CategoryValidator categoryValidator;
     private final RAGContextRetriever ragContextRetriever;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    private final MeterRegistry meterRegistry;
 
     @Value("${app.cache.agent-ttl-seconds:86400}")
     private long baseTtl;
@@ -70,7 +73,8 @@ public class CategorizationService {
                                  CategorizationStrategy categorizationStrategy,
                                  CategoryValidator categoryValidator,
                                  RAGContextRetriever ragContextRetriever,
-                                 KafkaTemplate<String, String> kafkaTemplate) {
+                                 KafkaTemplate<String, String> kafkaTemplate,
+                                 MeterRegistry meterRegistry) {
         this.transactionRepository = transactionRepository;
         this.projectionService = projectionService;
         this.redis = redis;
@@ -79,19 +83,24 @@ public class CategorizationService {
         this.categoryValidator = categoryValidator;
         this.ragContextRetriever = ragContextRetriever;
         this.kafkaTemplate = kafkaTemplate;
+        this.meterRegistry = meterRegistry;
     }
 
     public AgentResult categorize(CategorizationInput input) {
         AgentResult rejected = null;
         for (LLMStrategy strategy : strategies) {
+            String strategyName = strategy.getClass().getSimpleName();
             try {
                 CategorizationInput effectiveInput = input;
                 if (strategy instanceof CategorizationStrategy) {
                     effectiveInput = input.withExamples(ragContextRetriever.findSimilar(
                             input.userId(), input.merchant(), input.normalizedMerchant(), input.isBulkImport()));
                 }
+                Timer.Sample sample = Timer.start(meterRegistry);
                 AgentResult result = strategy.execute(effectiveInput);
+                sample.stop(meterRegistry.timer("solara.llm.categorization.duration", "strategy", strategyName));
                 if (result == null || result.category() == null) {
+                    recordOutcome(strategyName, "uncategorized");
                     continue;
                 }
                 rejected = result;
@@ -101,11 +110,13 @@ public class CategorizationService {
                     if (!input.isBulkImport() && input.normalizedMerchant() != null) {
                         cacheSet(input.normalizedMerchant(), input.userId(), validated);
                     }
+                    recordOutcome(strategyName, "categorized");
                     log.debug("{} categorized merchant={} as {}",
                             strategy.getClass().getSimpleName(), input.merchant(), validated.category());
                     return validated;
                 }
             } catch (Exception e) {
+                recordOutcome(strategyName, "failed");
                 log.warn("{} failed for merchant={}: {}",
                         strategy.getClass().getSimpleName(), input.merchant(), e.getMessage());
             }
@@ -116,6 +127,11 @@ public class CategorizationService {
                     rejected.merchant(), rejected.description());
         }
         return null;
+    }
+
+    private void recordOutcome(String strategyName, String outcome) {
+        meterRegistry.counter("solara.categorization.outcome",
+                "strategy", strategyName, "outcome", outcome).increment();
     }
 
     public void publishCategorized(CategorizedTransaction transaction, String previousNormalizedMerchant) {
@@ -161,6 +177,7 @@ public class CategorizationService {
                                              LocalDate dateFrom, LocalDate dateTo,
                                              String paymentMode, BigDecimal amountMin, BigDecimal amountMax,
                                              LocalDate updatedAtFrom, LocalDate updatedAtTo,
+                                             Boolean bulkImport,
                                              Pageable pageable) {
         Specification<CategorizedTransaction> spec = Specification.where(TransactionSpecifications.forUser(userId));
 
@@ -194,6 +211,12 @@ public class CategorizationService {
             Instant from = updatedAtFrom != null ? updatedAtFrom.atStartOfDay(ZoneOffset.UTC).toInstant() : null;
             Instant to = updatedAtTo != null ? updatedAtTo.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant() : null;
             spec = spec.and(TransactionSpecifications.updatedBetween(from, to));
+        }
+
+        if (Boolean.TRUE.equals(bulkImport)) {
+            spec = spec.and(TransactionSpecifications.isBulkImport(true));
+        } else if (Boolean.FALSE.equals(bulkImport)) {
+            spec = spec.and(TransactionSpecifications.isBulkImport(false));
         }
 
         return transactionRepository.findAll(spec, sanitizeSort(pageable));

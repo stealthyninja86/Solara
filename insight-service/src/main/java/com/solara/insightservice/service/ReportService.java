@@ -27,14 +27,14 @@ import java.util.stream.Collectors;
 public class ReportService {
 
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
-    private static final int WEEKLY_BUCKETS = 4;
-    private static final int MONTHLY_BUCKETS = 6;
-    private static final int YEARLY_BUCKETS = 5;
 
     private final ProjectionRepository projectionRepository;
+    private final com.solara.insightservice.repository.CategorizedTransactionRepository categorizedTransactionRepository;
 
-    public ReportService(ProjectionRepository projectionRepository) {
+    public ReportService(ProjectionRepository projectionRepository,
+                         com.solara.insightservice.repository.CategorizedTransactionRepository categorizedTransactionRepository) {
         this.projectionRepository = projectionRepository;
+        this.categorizedTransactionRepository = categorizedTransactionRepository;
     }
 
     public ReportResponse buildReport(UUID userId, ReportPeriod period, LocalDate at) {
@@ -44,16 +44,30 @@ public class ReportService {
         Map<TransactionCategory, BigDecimal> currentTotals = totalsByCategory(userId, projectionPeriod(period), current);
         Map<TransactionCategory, BigDecimal> previousTotals = totalsByCategory(userId, projectionPeriod(period), previous);
 
-        ReportSummary summary = buildSummary(userId, projectionPeriod(period), current);
+        ReportSummary summary = buildSummary(userId, period, current);
         List<ReportCategorySpending> categories = buildCategorySpending(currentTotals, previousTotals);
         List<ReportTrendPoint> trend = buildTrend(userId, period, at);
 
         return new ReportResponse(userId, period, summary, categories, trend);
     }
 
-    private ReportSummary buildSummary(UUID userId, String projectionPeriod, DateRange current) {
-        BigDecimal income = sumByType(userId, projectionPeriod, current, "CREDIT");
-        BigDecimal expenses = sumByType(userId, projectionPeriod, current, "DEBIT");
+    private ReportSummary buildSummary(UUID userId, ReportPeriod period, DateRange current) {
+        BigDecimal income = switch (period) {
+            case WEEKLY -> {
+                LocalDate monthStart = YearMonth.from(current.from()).atDay(1);
+                yield projectionRepository.findMonthlyIncome(userId, monthStart).orElse(BigDecimal.ZERO);
+            }
+            case MONTHLY -> projectionRepository.findMonthlyIncome(userId, current.from()).orElse(BigDecimal.ZERO);
+            case YEARLY -> {
+                BigDecimal total = BigDecimal.ZERO;
+                for (int m = 1; m <= 12; m++) {
+                    total = total.add(projectionRepository.findMonthlyIncome(userId,
+                            LocalDate.of(current.from().getYear(), m, 1)).orElse(BigDecimal.ZERO));
+                }
+                yield total;
+            }
+        };
+        BigDecimal expenses = sumByType(userId, projectionPeriod(period), current, "DEBIT");
         BigDecimal savings = income.subtract(expenses);
         int savingsRate = income.signum() > 0
                 ? savings.multiply(HUNDRED).divide(income, 0, RoundingMode.HALF_UP).intValue()
@@ -78,35 +92,58 @@ public class ReportService {
         List<ReportTrendPoint> points = new ArrayList<>();
         switch (period) {
             case WEEKLY -> {
-                LocalDate monthStart = YearMonth.from(at).atDay(1);
-                for (int bucket = 0; bucket < WEEKLY_BUCKETS; bucket++) {
-                    DateRange range = weekRange(monthStart, bucket);
-                    points.add(trendPoint(userId, "WEEKLY", range,
-                            String.format(Locale.ROOT, "W%d", bucket + 1)));
+                LocalDate weekStart = at.with(java.time.DayOfWeek.MONDAY);
+                YearMonth ym = YearMonth.from(at);
+                BigDecimal monthIncome = projectionRepository.findMonthlyIncome(userId,
+                        ym.atDay(1)).orElse(BigDecimal.ZERO);
+                BigDecimal dailyIncome = ym.lengthOfMonth() > 0
+                        ? monthIncome.divide(BigDecimal.valueOf(ym.lengthOfMonth()), 2, RoundingMode.HALF_UP)
+                        : BigDecimal.ZERO;
+                String[] dayLabels = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+                java.time.Instant[] dayStarts = new java.time.Instant[7];
+                java.time.Instant[] dayEnds = new java.time.Instant[7];
+                for (int i = 0; i < 7; i++) {
+                    LocalDate day = weekStart.plusDays(i);
+                    dayStarts[i] = day.atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
+                    dayEnds[i] = day.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
+                }
+                for (int i = 0; i < 7; i++) {
+                    BigDecimal expenses = categorizedTransactionRepository
+                            .sumAmountByUserAndTypeAndPeriod(userId, "DEBIT", dayStarts[i], dayEnds[i]);
+                    points.add(new ReportTrendPoint(dayLabels[i], dailyIncome, expenses));
                 }
             }
             case MONTHLY -> {
-                YearMonth anchor = YearMonth.from(at);
-                for (int bucket = MONTHLY_BUCKETS - 1; bucket >= 0; bucket--) {
-                    YearMonth bucketMonth = anchor.minusMonths(bucket);
-                    points.add(trendPoint(userId, "MONTHLY", DateRange.of(bucketMonth),
-                            bucketMonth.getMonth().getDisplayName(TextStyle.SHORT, Locale.ENGLISH)));
+                LocalDate weekStart = at.with(java.time.DayOfWeek.MONDAY);
+                BigDecimal monthIncome = projectionRepository.findMonthlyIncome(userId,
+                        YearMonth.from(at).atDay(1)).orElse(BigDecimal.ZERO);
+                for (int w = 0; w < 4; w++) {
+                    LocalDate wFrom = weekStart.plusDays(w * 7L);
+                    LocalDate wTo = wFrom.plusDays(6);
+                    DateRange range = DateRange.ofDay(wFrom, wTo);
+                    points.add(trendPoint(userId, "WEEKLY", range, monthIncome,
+                            String.format(Locale.ROOT, "W%d", w + 1)));
                 }
             }
             case YEARLY -> {
-                int anchorYear = at.getYear();
-                for (int bucket = YEARLY_BUCKETS - 1; bucket >= 0; bucket--) {
-                    int year = anchorYear - bucket;
-                    points.add(trendPoint(userId, "MONTHLY", DateRange.ofYear(year),
-                            Integer.toString(year)));
+                int year = at.getYear();
+                String[] monthLabels = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+                for (int m = 0; m < 12; m++) {
+                    YearMonth bucketMonth = YearMonth.of(year, m + 1);
+                    LocalDate bucketMonthStart = bucketMonth.atDay(1);
+                    BigDecimal monthIncome = projectionRepository.findMonthlyIncome(userId,
+                            bucketMonthStart).orElse(BigDecimal.ZERO);
+                    points.add(trendPoint(userId, "MONTHLY", DateRange.of(bucketMonth), monthIncome,
+                            monthLabels[m]));
                 }
             }
         }
         return points;
     }
 
-    private ReportTrendPoint trendPoint(UUID userId, String projectionPeriod, DateRange range, String label) {
-        BigDecimal income = sumByType(userId, projectionPeriod, range, "CREDIT");
+    private ReportTrendPoint trendPoint(UUID userId, String projectionPeriod, DateRange range,
+                                         BigDecimal income, String label) {
         BigDecimal expenses = sumByType(userId, projectionPeriod, range, "DEBIT");
         return new ReportTrendPoint(label, income, expenses);
     }
@@ -187,6 +224,10 @@ public class ReportService {
 
         static DateRange ofDay(LocalDate day) {
             return new DateRange(day, day);
+        }
+
+        static DateRange ofDay(LocalDate from, LocalDate to) {
+            return new DateRange(from, to);
         }
     }
 }

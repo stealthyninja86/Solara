@@ -1,6 +1,7 @@
 package com.solara.insightservice.controller;
 
 import com.solara.insightservice.dto.response.BudgetResponse;
+import com.solara.insightservice.dto.response.IncomeResponse;
 import com.solara.insightservice.dto.response.ReportResponse;
 import com.solara.insightservice.dto.response.SafeToSpendResponse;
 import com.solara.insightservice.dto.response.TrendsResponse;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.Map;
 import java.util.UUID;
 
@@ -39,9 +41,11 @@ public class ProjectionController {
     }
 
     @GetMapping("/safe-to-spend")
-    public ResponseEntity<SafeToSpendResponse> safeToSpend(@RequestParam UUID userId) {
-        log.debug("safe-to-spend requested: userId={}", userId);
-        BigDecimal safeToSpend = queryService.calculateSafeToSpend(userId);
+    public ResponseEntity<SafeToSpendResponse> safeToSpend(
+            @RequestParam UUID userId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate at) {
+        log.debug("safe-to-spend requested: userId={}, at={}", userId, at);
+        BigDecimal safeToSpend = queryService.calculateSafeToSpend(userId, at);
         log.debug("safe-to-spend returned: userId={}, amount={}", userId, safeToSpend);
         return ResponseEntity.ok(new SafeToSpendResponse(userId, safeToSpend, "MONTHLY"));
     }
@@ -71,10 +75,13 @@ public class ProjectionController {
     }
 
     @GetMapping("/budget")
-    public ResponseEntity<BudgetResponse> getBudget(@RequestParam UUID userId) {
-        log.debug("budget get requested: userId={}", userId);
-        BigDecimal totalSpent = queryService.sumTotalSpent(userId);
-        BigDecimal monthlyBudget = queryService.getMonthlyBudget(userId).orElse(BigDecimal.ZERO);
+    public ResponseEntity<BudgetResponse> getBudget(
+            @RequestParam UUID userId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate at) {
+        log.debug("budget get requested: userId={}, at={}", userId, at);
+        LocalDate monthStart = at != null ? at.withDayOfMonth(1) : YearMonth.now().atDay(1);
+        BigDecimal totalSpent = queryService.sumTotalSpent(userId, monthStart);
+        BigDecimal monthlyBudget = queryService.getMonthlyBudget(userId, monthStart).orElse(BigDecimal.ZERO);
         return ResponseEntity.ok(new BudgetResponse(userId, totalSpent, monthlyBudget));
     }
 
@@ -85,7 +92,24 @@ public class ProjectionController {
         BigDecimal budget = body.getOrDefault("budget", BigDecimal.ZERO);
         log.info("budget set requested: userId={}, budget={}", userId, budget);
         queryService.setMonthlyBudget(userId, budget);
-        BigDecimal totalSpent = queryService.sumTotalSpent(userId);
+        BigDecimal totalSpent = queryService.sumTotalSpent(userId, YearMonth.now().atDay(1));
         return ResponseEntity.ok(new BudgetResponse(userId, totalSpent, budget));
+    }
+
+    @GetMapping("/income")
+    public ResponseEntity<IncomeResponse> getIncome(@RequestParam UUID userId) {
+        log.debug("income get requested: userId={}", userId);
+        BigDecimal monthlyIncome = queryService.getMonthlyIncome(userId).orElse(BigDecimal.ZERO);
+        return ResponseEntity.ok(new IncomeResponse(userId, monthlyIncome));
+    }
+
+    @PutMapping("/income")
+    public ResponseEntity<IncomeResponse> setIncome(
+            @RequestParam UUID userId,
+            @RequestBody Map<String, BigDecimal> body) {
+        BigDecimal income = body.getOrDefault("income", BigDecimal.ZERO);
+        log.info("income set requested: userId={}, income={}", userId, income);
+        queryService.setMonthlyIncome(userId, income);
+        return ResponseEntity.ok(new IncomeResponse(userId, income));
     }
 }

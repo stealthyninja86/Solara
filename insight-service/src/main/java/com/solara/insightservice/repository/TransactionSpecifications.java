@@ -81,4 +81,8 @@ public class TransactionSpecifications {
             return predicate;
         };
     }
+
+    public static Specification<CategorizedTransaction> isBulkImport(boolean bulkImport) {
+        return (root, query, cb) -> cb.equal(root.get("bulkImport"), bulkImport);
+    }
 }

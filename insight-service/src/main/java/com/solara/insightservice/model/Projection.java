@@ -43,6 +43,9 @@ public class Projection {
     @Column(name = "transaction_count", nullable = false)
     private int transactionCount;
 
+    @Column(name = "monthly_income", precision = 12, scale = 2)
+    private BigDecimal monthlyIncome;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -85,6 +88,9 @@ public class Projection {
 
     public int getTransactionCount() { return transactionCount; }
     public void setTransactionCount(int transactionCount) { this.transactionCount = transactionCount; }
+
+    public BigDecimal getMonthlyIncome() { return monthlyIncome; }
+    public void setMonthlyIncome(BigDecimal monthlyIncome) { this.monthlyIncome = monthlyIncome; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }

@@ -54,6 +54,22 @@ public interface ProjectionRepository extends JpaRepository<Projection, UUID> {
     @Modifying
     @Query(value = """
         INSERT INTO projections (id, user_id, category, period, period_start, transaction_type,
+                                 total_amount, transaction_count, monthly_income, created_at, updated_at)
+        VALUES (:id, :userId, 'BUDGET', 'MONTHLY', :periodStart, 'INCOME', 0, 0, :income, NOW(), NOW())
+        ON CONFLICT (user_id, category, period, period_start, transaction_type)
+        DO UPDATE SET monthly_income = :income, updated_at = NOW()
+        """, nativeQuery = true)
+    void upsertIncome(@Param("id") UUID id, @Param("userId") UUID userId,
+                      @Param("periodStart") LocalDate periodStart,
+                      @Param("income") BigDecimal income);
+
+    @Query(value = "SELECT monthly_income FROM projections WHERE user_id = :userId AND period_start = :periodStart AND monthly_income IS NOT NULL LIMIT 1", nativeQuery = true)
+    Optional<BigDecimal> findMonthlyIncome(@Param("userId") UUID userId,
+                                            @Param("periodStart") LocalDate periodStart);
+
+    @Modifying
+    @Query(value = """
+        INSERT INTO projections (id, user_id, category, period, period_start, transaction_type,
                                  total_amount, transaction_count, monthly_budget, created_at, updated_at)
         VALUES (:id, :userId, 'BUDGET', 'MONTHLY', :periodStart, 'BUDGET', 0, 0, :budget, NOW(), NOW())
         ON CONFLICT (user_id, category, period, period_start, transaction_type)
