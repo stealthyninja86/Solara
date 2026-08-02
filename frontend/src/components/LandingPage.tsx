@@ -125,7 +125,7 @@ export function LandingPage() {
               <span className="ml-1.5 inline-block">{"\u2192"}</span>
             </button>
             <button
-              onClick={() => window.open("https://github.com/stealthyninja86/service_categorizer", "_blank", "noopener noreferrer")}
+              onClick={() => window.open("https://github.com/stealthyninja86/Solara", "_blank", "noopener noreferrer")}
               className="landing-ghost-btn"
             >
               View on GitHub
@@ -303,7 +303,7 @@ export function LandingPage() {
                 Get Started
               </button>
               <button
-                onClick={() => window.open("https://github.com/stealthyninja86/service_categorizer", "_blank", "noopener noreferrer")}
+                onClick={() => window.open("https://github.com/stealthyninja86/Solara", "_blank", "noopener noreferrer")}
                 className="landing-ghost-btn"
               >
                 View Source
@@ -336,7 +336,7 @@ export function LandingPage() {
             <div className="landing-footer-col">
               <h4 className="landing-footer-heading">Resources</h4>
               <a
-                href="https://github.com/stealthyninja86/service_categorizer"
+                href="https://github.com/stealthyninja86/Solara"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="landing-footer-link"
@@ -344,7 +344,7 @@ export function LandingPage() {
                 GitHub
               </a>
               <a
-                href="https://github.com/stealthyninja86/service_categorizer/blob/main/LICENSE"
+                href="https://github.com/stealthyninja86/Solara/blob/main/LICENSE"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="landing-footer-link"
