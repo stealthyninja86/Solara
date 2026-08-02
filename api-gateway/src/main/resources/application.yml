@@ -125,7 +125,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,gateway,metrics
+        include: health,info,gateway,metrics,prometheus
   endpoint:
     health:
       show-details: always
@@ -135,6 +135,14 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: http://otel-collector:4318/v1/traces
+  tracing:
+    sampling:
+      probability: 1.0
 
 server:
   port: 4000

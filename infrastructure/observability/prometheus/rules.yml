@@ -1,0 +1,27 @@
+groups:
+  - name: solara
+    rules:
+      - alert: DlqBacklog
+        expr: solara_dlq_depth > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DLQ {{ $labels.job }} has {{ $value }} unconsumed messages"
+
+      - alert: CircuitBreakerOpen
+        expr: resilience4j_circuitbreaker_state{state="open"} == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Circuit breaker {{ $labels.name }} is OPEN"
+
+      - alert: LlmFailureRateHigh
+        expr: sum by (strategy) (rate(solara_categorization_outcome_total{outcome="failed"}[5m]))
+          / clamp_min(sum by (strategy) (rate(solara_categorization_outcome_total[5m])), 1) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM strategy {{ $labels.strategy }} failing >20% of calls"
