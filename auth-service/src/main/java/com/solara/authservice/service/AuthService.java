@@ -55,4 +55,15 @@ public class AuthService {
                 .orElseThrow(() -> new UserNotFoundException("User not found: " + id));
         return new UserProfileResponse(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName());
     }
+
+    public UserProfileResponse updateProfile(UUID id, String firstName, String lastName) {
+        User user = userService.updateProfile(id, firstName, lastName);
+        logger.info("Profile updated for user: {}", user.getEmail());
+        return new UserProfileResponse(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName());
+    }
+
+    public void changePassword(UUID id, String currentPassword, String newPassword) {
+        userService.changePassword(id, currentPassword, newPassword);
+        logger.info("Password changed for user id: {}", id);
+    }
 }

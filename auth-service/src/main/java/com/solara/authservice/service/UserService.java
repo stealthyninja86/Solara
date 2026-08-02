@@ -38,4 +38,26 @@ public class UserService {
     public Optional<User> findById(UUID id) {
         return userRepository.findById(id);
     }
+
+    public User updateProfile(UUID id, String firstName, String lastName) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new com.solara.authservice.exception.UserNotFoundException("User not found: " + id));
+        if (firstName != null) {
+            user.setFirstName(firstName);
+        }
+        if (lastName != null) {
+            user.setLastName(lastName);
+        }
+        return userRepository.save(user);
+    }
+
+    public void changePassword(UUID id, String currentPassword, String newPassword) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new com.solara.authservice.exception.UserNotFoundException("User not found: " + id));
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new com.solara.authservice.exception.InvalidPasswordException("Current password is incorrect");
+        }
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
 }

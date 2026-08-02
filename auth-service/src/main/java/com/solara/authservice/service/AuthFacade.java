@@ -73,4 +73,12 @@ public class AuthFacade {
     public UserProfileResponse getUserById(UUID id) {
         return authService.getUserById(id);
     }
+
+    public UserProfileResponse updateProfile(UUID id, String firstName, String lastName) {
+        return authService.updateProfile(id, firstName, lastName);
+    }
+
+    public void changePassword(UUID id, String currentPassword, String newPassword) {
+        authService.changePassword(id, currentPassword, newPassword);
+    }
 }

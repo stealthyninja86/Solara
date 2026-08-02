@@ -1,7 +1,9 @@
 package com.solara.authservice.controller;
 
+import com.solara.authservice.dto.request.ChangePasswordRequest;
 import com.solara.authservice.dto.request.LoginRequest;
 import com.solara.authservice.dto.request.RegisterRequest;
+import com.solara.authservice.dto.request.UpdateProfileRequest;
 import com.solara.authservice.dto.response.AuthResponse;
 import com.solara.authservice.dto.response.UserProfileResponse;
 import com.solara.authservice.service.AuthFacade;
@@ -16,6 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -111,5 +114,28 @@ public class AuthController {
         UUID userId = UUID.fromString(Objects.requireNonNull(auth.getToken().getSubject()));
         UserProfileResponse user = authFacade.getUserById(userId);
         return ResponseEntity.ok(user);
+    }
+
+    @PatchMapping("/profile")
+    public ResponseEntity<UserProfileResponse> updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
+        var auth = (JwtAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
+        assert auth != null;
+        UUID userId = UUID.fromString(Objects.requireNonNull(auth.getToken().getSubject()));
+        UserProfileResponse user = authFacade.updateProfile(userId, request.firstName(), request.lastName());
+        log.info("Profile updated for user: {}", user.email());
+        return ResponseEntity.ok(user);
+    }
+
+    @PutMapping("/password")
+    public ResponseEntity<Map<String, String>> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        if (!request.newPassword().equals(request.confirmPassword())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "New password and confirm password do not match"));
+        }
+        var auth = (JwtAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
+        assert auth != null;
+        UUID userId = UUID.fromString(Objects.requireNonNull(auth.getToken().getSubject()));
+        authFacade.changePassword(userId, request.currentPassword(), request.newPassword());
+        log.info("Password changed for user id: {}", userId);
+        return ResponseEntity.ok(Map.of("message", "Password changed successfully"));
     }
 }
