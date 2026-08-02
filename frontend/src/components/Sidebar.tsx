@@ -1,5 +1,4 @@
 import { NavLink } from "react-router-dom";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { Icon } from "./Icon";
 
@@ -7,12 +6,11 @@ const NAVIGATION_ITEMS = [
   { to: "/dashboard", label: "Overview", icon: "overview" as const, end: true },
   { to: "/dashboard/reports", label: "Reports", icon: "reports" as const },
   { to: "/dashboard/settings", label: "Settings", icon: "settings" as const },
-  { to: "/dashboard/preview", label: "Preview", icon: "preview" as const },
+  // { to: "/dashboard/preview", label: "Preview", icon: "preview" as const },
 ];
 
 export function Sidebar({ onCollapse }: { onCollapse: () => void }) {
   const auth = useAuth();
-  const navigate = useNavigate();
 
   return (
     <aside className="flex h-full w-[220px] shrink-0 flex-col bg-[var(--color-surface)]">
@@ -52,7 +50,7 @@ export function Sidebar({ onCollapse }: { onCollapse: () => void }) {
 
       <div className="px-4 pb-5">
         <button
-          onClick={() => auth.logout().then(() => navigate("/", { replace: true }))}
+          onClick={() => auth.logout().then(() => { window.location.href = "/"; })}
           className="mx-1 mt-0! flex w-[calc(100%-0.5rem)] cursor-pointer items-center gap-2.5 rounded-md bg-transparent! px-3! py-2! text-[0.8rem]! text-[var(--color-text-muted)]! transition-colors hover:bg-[var(--color-bg-hover)]! hover:text-[var(--color-danger)]!"
         >
           <Icon name="logout" size={14} />

@@ -158,6 +158,9 @@ export function DashboardSettings() {
             </div>
           </div>
         </div>
+        <p className="mt-3 text-[0.75rem] text-[var(--color-text-muted)]">
+          Changes save instantly. If the header or overview doesn't update, hard refresh the page (Cmd+Shift+R).
+        </p>
       </div>
 
       {/* Style Section */}

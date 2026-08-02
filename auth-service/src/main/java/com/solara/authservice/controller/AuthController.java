@@ -117,6 +117,7 @@ public class AuthController {
     }
 
     @PatchMapping("/profile")
+    @PutMapping("/profile")
     public ResponseEntity<UserProfileResponse> updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
         var auth = (JwtAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
         assert auth != null;

@@ -299,8 +299,8 @@ export function DashboardOverview() {
 
   const hour = new Date().getHours();
   const timeGreeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const emailPrefix = (auth.email?.split("@")[0] ?? "there");
-  const displayName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+  const displayName = auth.firstName || (auth.email?.split("@")[0] ?? "there");
+  const capitalizedName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
 
   function shiftMonth(delta: number) {
     let newMonth = selectedMonth + delta;
@@ -370,7 +370,7 @@ export function DashboardOverview() {
         <section className="card self-center max-w-[1000px] w-full !p-10" style={{ "--section-delay": "0ms" } as React.CSSProperties}>
         <div className="flex flex-col items-center py-6 text-center">
           <h2 className="text-4xl font-bold text-[var(--color-text)]">
-            <Icon name="logo" size={28} /> {timeGreeting}, {displayName} <Icon name="greeting" size={28} />
+            <Icon name="logo" size={28} /> {timeGreeting}, {capitalizedName} <Icon name="greeting" size={28} />
           </h2>
           <p className="mt-2 max-w-md text-[0.95rem] leading-relaxed text-[var(--color-text)]">
             Solara helps you understand where your money goes — no spreadsheets, no hassle.
