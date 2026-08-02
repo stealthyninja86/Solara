@@ -57,17 +57,17 @@ Every transaction is automatically categorized using a local LLM running on Olla
 
 Set your monthly income and budget. Solara calculates your **safe to spend** — the real number available after recurring expenses, subscriptions, and what you've already spent. A live calculation that updates every time you add or delete a transaction.
 
-### See the Patterns
+### Report
 
-Weekly, monthly, and yearly reports with:
-- **Trend charts** — income vs. expenses over time
-- **Category breakdown** — where your money actually goes
-- **Spending behaviour** — comparison with the previous period
-- **Financial snapshot** — savings rate, transaction count, top category
+Weekly, monthly, and yearly reports built from your categorized transactions, each comparing against the previous matching period:
+
+- **Financial snapshot** — your income, expenses, savings, and savings rate for the period, so you always know the bottom line at a glance.
+- **Category breakdown** — what each category cost you, sorted by spending, with the percentage change vs. the previous period. See at a glance whether dining out is creeping up month over month.
+- **Trend charts** — income vs. expenses plotted day-by-day (weekly report), week-by-week (monthly report), or month-by-month (yearly report).
 
 ### Stay in Control
 
-Month-by-month navigation across both the Overview and Reports pages. Scroll back to January, compare with March, see how your spending evolved. Pull-to-refresh on mobile. Dark and light themes that respect your system preference.
+Navigate month by month across the Overview and Reports pages. Scroll back to January, compare with March, see how your spending evolved. Pull-to-refresh on mobile. Dark and light themes that respect your system preference.
 
 ---
 
@@ -136,3 +136,10 @@ For the full observability stack, add the profile:
 ```bash
 docker-compose --profile observability up
 ```
+
+---
+
+## Roadmap
+
+- **Subscription tracking** — automatically spot recurring payments, get upcoming-charge warnings, and see monthly subscription totals in one place.
+- **Personalized recommendations** — plain-language insights on where you could cut spending, grounded in your own categorized transaction history.
