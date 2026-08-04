@@ -104,11 +104,6 @@ Run it on your laptop, a Raspberry Pi, or a full AWS account. The data model, th
 - **Flyway migrations** — schema versioned and reproducible across every service.
 - **Full observability** — OpenTelemetry traces, Prometheus metrics, Grafana dashboards, Loki logs. Optional stack via Docker Compose profile.
 
----
-
-## Built With
-
-Java 21, Spring Boot 4.1, Spring Cloud 2025.1, Spring AI 2.0, Apache Kafka 4.0 (KRaft), PostgreSQL 16, pgvector, Redis 7, Ollama, React 19, TypeScript 5.7, Vite 6, Tailwind CSS 4, Docker Compose, Flyway, Resilience4j, OpenTelemetry, Prometheus, Grafana, Loki.
 
 ---
 
