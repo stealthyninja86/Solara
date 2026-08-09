@@ -1,6 +1,7 @@
 package com.solara.insightservice.repository;
 
 import com.solara.insightservice.model.CategorizedTransaction;
+import com.solara.insightservice.model.TransactionCategory;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -20,7 +21,10 @@ public class TransactionSpecifications {
 
     public static Specification<CategorizedTransaction> uncategorized() {
         return (root, query, cb) -> cb.and(
-                cb.isNull(root.get("category")),
+                cb.or(
+                        cb.isNull(root.get("category")),
+                        cb.equal(root.get("category"), TransactionCategory.UNCATEGORIZED)
+                ),
                 cb.equal(root.get("agentFailed"), false),
                 cb.lessThan(root.get("agentAttempts"), 3)
         );

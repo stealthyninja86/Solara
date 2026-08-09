@@ -14,5 +14,6 @@ public enum TransactionCategory {
     EDUCATION,
     TRAVEL,
     OTHER,
+    UNCATEGORIZED,
     BUDGET
 }

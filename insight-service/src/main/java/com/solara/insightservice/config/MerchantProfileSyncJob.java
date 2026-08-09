@@ -2,6 +2,7 @@ package com.solara.insightservice.config;
 
 import com.solara.insightservice.model.TransactionCategory;
 import com.solara.insightservice.repository.MerchantProfileRepository;
+import com.solara.insightservice.util.VectorLiterals;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -106,7 +107,7 @@ public class MerchantProfileSyncJob {
                 float[] embedding = embeddingModel.embed(embedText);
                 merchantProfileRepository.upsert(
                         userId, merchant, normalizedMerchant,
-                        description, category.name(), toVectorLiteral(embedding));
+                        description, category.name(), VectorLiterals.toPostgresLiteral(embedding));
                 upserted++;
             } catch (Exception e) {
                 skipped++;
@@ -131,14 +132,5 @@ public class MerchantProfileSyncJob {
         if (deleted > 0) {
             log.info("Profile store sync: deleted {} orphan profiles", deleted);
         }
-    }
-
-    private String toVectorLiteral(float[] values) {
-        StringBuilder builder = new StringBuilder("[");
-        for (int i = 0; i < values.length; i++) {
-            if (i > 0) builder.append(",");
-            builder.append(values[i]);
-        }
-        return builder.append("]").toString();
     }
 }

@@ -6,5 +6,6 @@ import java.util.UUID;
 public record SafeToSpendResponse(
     UUID userId,
     BigDecimal safeToSpend,
+    BigDecimal recurringCosts,
     String period
 ) {}

@@ -1,6 +1,6 @@
 package com.solara.insightservice.controller;
 
-import com.solara.insightservice.dto.CategorizedTransactionResponse;
+import com.solara.insightservice.dto.response.CategorizedTransactionResponse;
 import com.solara.insightservice.dto.request.RecategorizeRequest;
 import com.solara.insightservice.dto.request.UpdateTransactionRequest;
 import com.solara.insightservice.model.CategorizedTransaction;
@@ -14,6 +14,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -89,5 +90,17 @@ public class CategorizationController {
         log.info("update requested: id={}, merchant={}, category={}", id, request.merchant(), request.category());
         CategorizedTransaction transaction = queryService.update(id, request);
         return ResponseEntity.ok(CategorizedTransactionResponse.from(transaction));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        log.info("delete requested: id={}", id);
+        try {
+            queryService.delete(id);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            log.debug("delete not found: id={}", id);
+            return ResponseEntity.notFound().build();
+        }
     }
 }

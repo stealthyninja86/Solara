@@ -1,4 +1,4 @@
-package com.solara.insightservice.dto.request;
+package com.solara.insightservice.dto.internal;
 
 import com.solara.insightservice.model.TransactionCategory;
 

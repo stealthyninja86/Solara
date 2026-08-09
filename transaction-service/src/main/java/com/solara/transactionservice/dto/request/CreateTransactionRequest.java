@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.UUID;
 
 public record CreateTransactionRequest(
@@ -14,5 +15,6 @@ public record CreateTransactionRequest(
         @NotNull BigDecimal amount,
         @NotNull PaymentMode paymentMode,
         @NotNull TransactionType type,
-        @Size(max = 500) String description
+        @Size(max = 500) String description,
+        LocalDate transactionDate
 ) {}

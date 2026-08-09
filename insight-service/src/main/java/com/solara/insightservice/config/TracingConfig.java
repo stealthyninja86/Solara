@@ -1,5 +1,7 @@
 package com.solara.insightservice.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.support.ContextPropagatingTaskDecorator;
@@ -7,7 +9,7 @@ import org.springframework.core.task.support.ContextPropagatingTaskDecorator;
 /**
  * Re-propagates trace/observation context across virtual-thread boundaries.
  *
- * <p>Virtual threads do not inherit thread-locals from the submitting thread, so
+ * Virtual threads do not inherit thread-locals from the submitting thread, so
  * without this decorator every span started on a platform thread (Kafka consumer,
  * scheduler) dies the moment work hops onto an executor's virtual threads — the
  * 10-30s LLM span would be orphaned. Spring Boot auto-applies the decorator to
@@ -17,8 +19,11 @@ import org.springframework.core.task.support.ContextPropagatingTaskDecorator;
 @Configuration
 public class TracingConfig {
 
+    private static final Logger log = LoggerFactory.getLogger(TracingConfig.class);
+
     @Bean
     public ContextPropagatingTaskDecorator contextPropagatingTaskDecorator() {
+        log.info("Trace context propagation across virtual threads enabled");
         return new ContextPropagatingTaskDecorator();
     }
 }

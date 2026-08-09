@@ -1,6 +1,7 @@
 package com.solara.insightservice.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.solara.insightservice.dto.internal.RAGContext;
 import com.solara.insightservice.dto.event.TransactionCategorizedEvent;
 import com.solara.insightservice.dto.event.TransactionCategorizedEventPayload;
 import com.solara.insightservice.dto.request.CategorizationInput;
@@ -13,8 +14,6 @@ import com.solara.insightservice.repository.TransactionSpecifications;
 import com.solara.insightservice.service.strategy.LLMStrategy;
 import com.solara.insightservice.service.strategy.categorization.CategorizationStrategy;
 import com.solara.insightservice.service.strategy.categorization.CategoryValidator;
-import com.solara.insightservice.service.strategy.categorization.MerchantCache;
-import com.solara.insightservice.service.strategy.categorization.RAGContextRetriever;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
@@ -36,12 +35,15 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 
 @Service
 public class CategorizationService {
@@ -53,49 +55,74 @@ public class CategorizationService {
     );
 
     private final CategorizedTransactionRepository transactionRepository;
-    private final ProjectionService projectionService;
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
     private final List<LLMStrategy> strategies;
     private final CategoryValidator categoryValidator;
-    private final RAGContextRetriever ragContextRetriever;
+    private final MerchantResolver merchantResolver;
+    private final RAGContextBuilder ragContextBuilder;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final MeterRegistry meterRegistry;
+    private final UserSettingsService userSettingsService;
 
     @Value("${app.cache.agent-ttl-seconds:86400}")
     private long baseTtl;
 
     public CategorizationService(CategorizedTransactionRepository transactionRepository,
-                                 ProjectionService projectionService,
                                  StringRedisTemplate redis,
                                  ObjectMapper objectMapper,
-                                 MerchantCache merchantCache,
                                  CategorizationStrategy categorizationStrategy,
                                  CategoryValidator categoryValidator,
-                                 RAGContextRetriever ragContextRetriever,
+                                 MerchantResolver merchantResolver,
+                                 RAGContextBuilder ragContextBuilder,
                                  KafkaTemplate<String, String> kafkaTemplate,
-                                 MeterRegistry meterRegistry) {
+                                 MeterRegistry meterRegistry,
+                                 UserSettingsService userSettingsService) {
         this.transactionRepository = transactionRepository;
-        this.projectionService = projectionService;
         this.redis = redis;
         this.objectMapper = objectMapper;
-        this.strategies = List.of(merchantCache, categorizationStrategy);
+        this.strategies = List.of(categorizationStrategy);
         this.categoryValidator = categoryValidator;
-        this.ragContextRetriever = ragContextRetriever;
+        this.merchantResolver = merchantResolver;
+        this.ragContextBuilder = ragContextBuilder;
         this.kafkaTemplate = kafkaTemplate;
         this.meterRegistry = meterRegistry;
+        this.userSettingsService = userSettingsService;
     }
 
     public AgentResult categorize(CategorizationInput input) {
+        // 1. Redis cache — instant, no DB hit
+        if (!input.isBulkImport() && input.normalizedMerchant() != null) {
+            AgentResult cached = cacheGet(input.normalizedMerchant(), input.userId());
+            if (cached != null) {
+                recordOutcome("cache", "categorized");
+                return cached;
+            }
+        }
+
+        // 2. Merchant resolver — KB alias + per-user profile
+        AgentResult resolved = merchantResolver.resolve(
+                input.userId(), input.merchant(), input.normalizedMerchant());
+        if (resolved != null) {
+            recordOutcome("merchant-resolver", "categorized");
+            return resolved;
+        }
+
+        // 3. Build RAG context — only when we have a merchant to query
+        RAGContext ragContext = null;
+        if (input.normalizedMerchant() != null) {
+            ragContext = ragContextBuilder.build(
+                    input.userId(), input.merchant(), input.normalizedMerchant());
+        }
+        CategorizationInput effectiveInput = ragContext != null
+                ? input.withRAGContext(ragContext)
+                : input;
+
+        // 4. LLM strategy chain
         AgentResult rejected = null;
-        for (LLMStrategy strategy : strategies) {
+        for (LLMStrategy strategy : activeStrategiesFor(input.userId())) {
             String strategyName = strategy.getClass().getSimpleName();
             try {
-                CategorizationInput effectiveInput = input;
-                if (strategy instanceof CategorizationStrategy) {
-                    effectiveInput = input.withExamples(ragContextRetriever.findSimilar(
-                            input.userId(), input.merchant(), input.normalizedMerchant(), input.isBulkImport()));
-                }
                 Timer.Sample sample = Timer.start(meterRegistry);
                 AgentResult result = strategy.execute(effectiveInput);
                 sample.stop(meterRegistry.timer("solara.llm.categorization.duration", "strategy", strategyName));
@@ -104,8 +131,7 @@ public class CategorizationService {
                     continue;
                 }
                 rejected = result;
-                AgentResult validated = categoryValidator.validate(result,
-                        input.isBulkImport() ? input.description() : null);
+                AgentResult validated = categoryValidator.validate(result, narrationFor(input));
                 if (validated != null) {
                     if (!input.isBulkImport() && input.normalizedMerchant() != null) {
                         cacheSet(input.normalizedMerchant(), input.userId(), validated);
@@ -122,11 +148,108 @@ public class CategorizationService {
             }
         }
         if (rejected != null) {
-            log.debug("Returning rejected result with null category for merchant={}", input.merchant());
-            return new AgentResult(null, rejected.confidence(), rejected.method(),
-                    rejected.merchant(), rejected.description());
+            log.debug("Returning rejected result coerced to OTHER for merchant={}", input.merchant());
+            return new AgentResult(TransactionCategory.OTHER, rejected.confidence(), rejected.method(),
+                    rejected.merchant(), rejected.description(), true);
         }
         return null;
+    }
+
+    /**
+     * Classifies many transactions in one pass. Each strategy in the chain is given the
+     * inputs the previous one could not classify (batch miss-propagation, mirroring the
+     * single-item chain). Batch-capable strategies group the misses into a single LLM call.
+     *
+     * @return results aligned by index with {@code inputs}; null where an item was not classified
+     */
+    public List<AgentResult> categorizeBatch(List<CategorizationInput> inputs) {
+        List<AgentResult> results = new ArrayList<>(Collections.nCopies(inputs.size(), null));
+        List<LLMStrategy> activeStrategies = batchStrategiesFor(inputs);
+        for (LLMStrategy strategy : activeStrategies) {
+            List<Integer> missIndices = IntStream.range(0, results.size())
+                    .filter(i -> results.get(i) == null)
+                    .boxed()
+                    .toList();
+            if (missIndices.isEmpty()) {
+                break;
+            }
+            List<CategorizationInput> misses = missIndices.stream().map(inputs::get).toList();
+            List<AgentResult> strategyResults = executeStrategyBatch(strategy, misses);
+            for (int i = 0; i < missIndices.size(); i++) {
+                results.set(missIndices.get(i), strategyResults.get(i));
+            }
+        }
+        return results;
+    }
+
+    /**
+     * Prunes the strategy chain for a single user: when smart (LLM) categorization is
+     * disabled, only strategies that do not invoke an LLM (the cache) run. Unknown
+     * merchants then fall through to {@code needsReview} instead of incurring LLM cost.
+     */
+    private List<LLMStrategy> activeStrategiesFor(UUID userId) {
+        if (userSettingsService.isLlmEnabled(userId)) {
+            return strategies;
+        }
+        return strategies.stream().filter(strategy -> !strategy.usesLlm()).toList();
+    }
+
+    /**
+     * Batch variant: bulk imports are single-user, so one gate covers the whole batch.
+     * In the unlikely mixed-user case the strictest setting wins (LLM disabled if any
+     * user in the batch has it off) — documented rather than solved: per-item pruning
+     * would defeat the purpose of a single batched LLM call.
+     */
+    private List<LLMStrategy> batchStrategiesFor(List<CategorizationInput> inputs) {
+        boolean llmAllowed = inputs.stream().allMatch(input -> userSettingsService.isLlmEnabled(input.userId()));
+        if (llmAllowed) {
+            return strategies;
+        }
+        return strategies.stream().filter(strategy -> !strategy.usesLlm()).toList();
+    }
+
+    private List<AgentResult> executeStrategyBatch(LLMStrategy strategy, List<CategorizationInput> inputs) {
+        List<CategorizationInput> enriched = inputs.stream()
+                .map(input -> {
+                    if (input.normalizedMerchant() == null) {
+                        return input;
+                    }
+                    RAGContext ragContext = ragContextBuilder.build(
+                            input.userId(), input.merchant(), input.normalizedMerchant());
+                    return ragContext != null ? input.withRAGContext(ragContext) : input;
+                })
+                .toList();
+
+        Timer.Sample sample = Timer.start(meterRegistry);
+        List<AgentResult> rawResults = strategy.executeBatch(enriched);
+        sample.stop(meterRegistry.timer("solara.llm.categorization.duration",
+                "strategy", strategy.getClass().getSimpleName()));
+
+        if (rawResults == null) {
+            return inputs.stream().map(input -> finalizeBatchResult(strategy, input, null)).toList();
+        }
+        return IntStream.range(0, inputs.size())
+                .mapToObj(i -> finalizeBatchResult(strategy, inputs.get(i),
+                        i < rawResults.size() ? rawResults.get(i) : null))
+                .toList();
+    }
+
+    private AgentResult finalizeBatchResult(LLMStrategy strategy, CategorizationInput input, AgentResult result) {
+        if (result == null || result.category() == null) {
+            recordOutcome(strategy.getClass().getSimpleName(), "uncategorized");
+            return result;
+        }
+        AgentResult validated = categoryValidator.validate(result, narrationFor(input));
+        if (validated == null) {
+            recordOutcome(strategy.getClass().getSimpleName(), "uncategorized");
+            return new AgentResult(TransactionCategory.OTHER, result.confidence(), result.method(),
+                    result.merchant(), result.description(), true);
+        }
+        if (!input.isBulkImport() && input.normalizedMerchant() != null) {
+            cacheSet(input.normalizedMerchant(), input.userId(), validated);
+        }
+        recordOutcome(strategy.getClass().getSimpleName(), "categorized");
+        return validated;
     }
 
     private void recordOutcome(String strategyName, String outcome) {
@@ -134,8 +257,20 @@ public class CategorizationService {
                 "strategy", strategyName, "outcome", outcome).increment();
     }
 
+    /**
+     * The raw narration the LLM's merchant must be grounded in — the anti-hallucination
+     * evidence check now runs on BOTH paths, not just bulk imports. Bulk-import rows
+     * carry the narration in description; single-path entries carry it in merchant
+     * (the raw bank string, or the user-entered name for manual adds). When merchant is
+     * null the validator skips grounding, exactly as before.
+     */
+    private String narrationFor(CategorizationInput input) {
+        return input.isBulkImport() ? input.description() : input.merchant();
+    }
+
     public void publishCategorized(CategorizedTransaction transaction, String previousNormalizedMerchant) {
-        if (transaction.getCategory() == null) {
+        if (transaction.getCategory() == null
+                || transaction.getCategory() == TransactionCategory.UNCATEGORIZED) {
             return;
         }
         try {
@@ -260,11 +395,6 @@ public class CategorizationService {
             cacheInvalidate(normalized, userId);
         }
 
-        if (saved.getCategory() != null) {
-            projectionService.upsertAll(userId, saved.getCategory(), saved.getAmount(),
-                    saved.getCreatedAt(), saved.getType());
-        }
-
         publishCategorized(saved, null);
 
         log.info("Recategorized transaction {} to {} (manual)", id, newCategory);
@@ -277,15 +407,9 @@ public class CategorizationService {
                 .orElseThrow(() -> new IllegalArgumentException("Transaction not found: " + id));
 
         UUID userId = transaction.getUserId();
-        TransactionCategory category = transaction.getCategory();
         String normalized = CategorizedTransaction.normalizeMerchant(transaction.getMerchant());
 
         transactionRepository.delete(transaction);
-
-        if (category != null) {
-            projectionService.upsertAll(userId, category, transaction.getAmount().negate(),
-                    transaction.getCreatedAt(), transaction.getType());
-        }
 
         if (normalized != null) {
             cacheInvalidate(normalized, userId);
@@ -307,21 +431,17 @@ public class CategorizationService {
         if (request.originalDescription() != null && !request.originalDescription().isBlank()) {
             transaction.setOriginalDescription(request.originalDescription());
         }
+        if (request.description() != null && !request.description().isBlank()) {
+            transaction.setDescription(request.description());
+        }
         if (request.category() != null && !request.category().equals(transaction.getCategory())) {
-            TransactionCategory oldCategory = transaction.getCategory();
-            if (oldCategory != null) {
-                projectionService.upsertAll(transaction.getUserId(), oldCategory,
-                        transaction.getAmount().negate(), transaction.getCreatedAt(),
-                        transaction.getType());
-            }
-
             transaction.setCategory(request.category());
             transaction.setCategorizationMethod("manual");
             transaction.setConfidence(null);
             transaction.setNeedsReview(false);
-
-            projectionService.upsertAll(transaction.getUserId(), request.category(),
-                    transaction.getAmount(), transaction.getCreatedAt(), transaction.getType());
+        }
+        if (request.needsReview() != null) {
+            transaction.setNeedsReview(request.needsReview());
         }
 
         String newNormalized = CategorizedTransaction.normalizeMerchant(transaction.getMerchant());

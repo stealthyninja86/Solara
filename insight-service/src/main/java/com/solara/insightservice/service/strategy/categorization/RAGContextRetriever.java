@@ -1,7 +1,8 @@
 package com.solara.insightservice.service.strategy.categorization;
 
-import com.solara.insightservice.dto.request.SimilarCategorization;
+import com.solara.insightservice.dto.internal.SimilarCategorization;
 import com.solara.insightservice.repository.MerchantProfileRepository;
+import com.solara.insightservice.util.VectorLiterals;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -36,26 +37,23 @@ public class RAGContextRetriever {
 
     public List<SimilarCategorization> findSimilar(UUID userId, String merchant, String normalizedMerchant,
                                                    boolean isBulkImport) {
+        long start = System.currentTimeMillis();
         try {
             if (merchantProfileRepository.countByUserId(userId) < minHistory) {
+                log.debug("RAG skipped (below minHistory={}): userId={}", minHistory, userId);
                 return List.of();
             }
             String queryText = isBulkImport ? merchant : normalizedMerchant;
             float[] queryEmbedding = embeddingModel.embed(queryText);
-            return merchantProfileRepository.findNearest(userId, toVectorLiteral(queryEmbedding), limit, minSimilarity);
+            List<SimilarCategorization> similar = merchantProfileRepository
+                    .findNearest(userId, VectorLiterals.toPostgresLiteral(queryEmbedding), limit, minSimilarity);
+            log.debug("RAG retrieval: userId={}, similar={}, durationMs={}",
+                    userId, similar.size(), System.currentTimeMillis() - start);
+            return similar;
         } catch (Exception e) {
             log.warn("RAG retrieval failed for userId={}, merchant={}: {}",
                     userId, merchant, e.getMessage());
             return List.of();
         }
-    }
-
-    private String toVectorLiteral(float[] values) {
-        StringBuilder builder = new StringBuilder("[");
-        for (int i = 0; i < values.length; i++) {
-            if (i > 0) builder.append(",");
-            builder.append(values[i]);
-        }
-        return builder.append("]").toString();
     }
 }

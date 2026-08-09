@@ -1,4 +1,4 @@
-package com.solara.insightservice.dto;
+package com.solara.insightservice.dto.response;
 
 import com.solara.insightservice.model.CategorizedTransaction;
 import com.solara.insightservice.model.TransactionCategory;
@@ -13,6 +13,7 @@ public record CategorizedTransactionResponse(
     String merchant,
     String normalizedMerchant,
     String originalDescription,
+    String description,
     BigDecimal amount,
     String currency,
     TransactionCategory category,
@@ -30,6 +31,7 @@ public record CategorizedTransactionResponse(
         return new CategorizedTransactionResponse(
             transaction.getTransactionId(), transaction.getUserId(), transaction.getMerchant(),
             transaction.getNormalizedMerchant(), transaction.getOriginalDescription(),
+            transaction.getDescription(),
             transaction.getAmount(), transaction.getCurrency(), transaction.getCategory(),
             transaction.getConfidence(), transaction.getCategorizationMethod(),
             transaction.getPaymentMode(), transaction.getType(),
