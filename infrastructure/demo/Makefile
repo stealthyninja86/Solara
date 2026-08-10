@@ -2,8 +2,9 @@
 # Solara demo host — script-only provisioning (NO Terraform)
 #
 # Launches ONE t4g.small EC2 instance in the default VPC running the repo's
-# docker-compose stack. user-data installs Docker + nginx, clones the repo,
-# boots the stack, builds the frontend, and nginx serves dist/ + proxies /api.
+# docker-compose stack. user-data installs Docker, clones the repo, and boots
+# the stack; the frontend is a compose service (node build → nginx serve) that
+# owns ports 80/443 — no host nginx, no host Node.
 #
 # Why scripts and not Terraform? This is a single resource you start/stop on
 # demand; Terraform's state/diff ceremony earns nothing at this scale. The
@@ -23,6 +24,17 @@ TAG_NAME      ?= solara-demo
 STATE_DIR     ?= ${HOME}/.aws/state
 SSH_USER      ?= ec2-user
 MY_IP         ?= $(shell curl -fsS --max-time 5 https://checkip.amazonaws.com 2>/dev/null || echo 0.0.0.0)
+
+# HTTPS via DuckDNS + Let's Encrypt (OPTIONAL — leave unset for plain HTTP).
+# Free path: a duckdns.org subdomain (no registration cost) + a Let's Encrypt
+# DV cert via certbot --nginx. No Elastic IP by design, so the public IP
+# changes on stop/start; solara-duckdns.service on the box re-points the
+# A-record on every boot, and certbot-renew.timer renews the 90-day cert.
+# The token is prepended into the user-data copy under $(STATE_DIR) (mode
+# 0600, never in git — same rule as the JWT keys).
+DUCK_DNS_DOMAIN ?=
+DUCK_DNS_TOKEN  ?=
+LE_EMAIL        ?=
 
 HERE             := $(abspath $(lastword $(MAKEFILE_LIST)))
 HERE_DIR         := $(dir $(HERE))
@@ -65,13 +77,15 @@ bootstrap: ## create SSH key pair + security group if needed
 	else echo "key pair already on disk"; fi
 	@if [ ! -f $(SG_ID_FILE) ]; then echo "creating security group '$(SG_NAME)'…"; \
 		$(AWS) ec2 create-security-group --region $(REGION) --group-name $(SG_NAME) \
-		  --description 'Solara demo: SSH + HTTP' --query 'GroupId' --output text > $(SG_ID_FILE); \
+		  --description 'Solara demo: SSH + HTTP + HTTPS' --query 'GroupId' --output text > $(SG_ID_FILE); \
 	fi
-	@echo "opening 22 from $(MY_IP)/32 and 80 from 0.0.0.0/0 (idempotent)…"
+	@echo "opening 22 from $(MY_IP)/32, 80 from 0.0.0.0/0, 443 from 0.0.0.0/0 (idempotent)…"
 	-$(AWS) ec2 authorize-security-group-ingress --region $(REGION) --group-id "$$(cat $(SG_ID_FILE))" \
 	  --protocol tcp --port 22 --cidr $(MY_IP)/32
 	-$(AWS) ec2 authorize-security-group-ingress --region $(REGION) --group-id "$$(cat $(SG_ID_FILE))" \
 	  --protocol tcp --port 80 --cidr 0.0.0.0/0
+	-$(AWS) ec2 authorize-security-group-ingress --region $(REGION) --group-id "$$(cat $(SG_ID_FILE))" \
+	  --protocol tcp --port 443 --cidr 0.0.0.0/0
 	@echo "==> ready. next: make provision"
 
 # --- lifecycle --------------------------------------------------------------------
@@ -79,11 +93,17 @@ bootstrap: ## create SSH key pair + security group if needed
 provision: bootstrap ## create the EC2 instance; stack boots itself via user-data
 	@test ! -f $(INSTANCE_ID_FILE) || { echo "instance already provisioned $$(cat $(INSTANCE_ID_FILE)) — make stop / teardown"; exit 0; }
 	@test -n "$(AMI)" || { echo "no AL2023 arm64 AMI found (check: make compute)"; exit 1; }
+	@echo "templating user-data with DuckDNS/Let's Encrypt vars (token stays out of git)…"
+	@{ \
+		head -1 $(USER_DATA_FILE); \
+		printf "DUCK_DNS_DOMAIN='$(DUCK_DNS_DOMAIN)'\nDUCK_DNS_TOKEN='$(DUCK_DNS_TOKEN)'\nLE_EMAIL='$(LE_EMAIL)'\n"; \
+		tail -n +2 $(USER_DATA_FILE); \
+	} > $(STATE_DIR)/user-data.sh && chmod 600 $(STATE_DIR)/user-data.sh
 	@echo "== launching $(INSTANCE_TYPE) AMI $(AMI) in default VPC…"
 	IID=$$($(AWS) ec2 run-instances --region $(REGION) \
 	  --image-id $(AMI) --instance-type $(INSTANCE_TYPE) \
 	  --key-name $(KEY_NAME) --security-group-ids "$$(cat $(SG_ID_FILE))" \
-	  --user-data file://$(USER_DATA_FILE) \
+	  --user-data file://$(STATE_DIR)/user-data.sh \
 	  --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":30,"VolumeType":"gp3"}}]' \
 	  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=$(TAG_NAME)}]' \
 	  --query 'Instances[0].InstanceId' --output text); \
@@ -93,6 +113,7 @@ provision: bootstrap ## create the EC2 instance; stack boots itself via user-dat
 	@echo "instance running. Public IP: $$($(AWS) ec2 describe-instances --region $(REGION) --instance-ids "$$(cat $(INSTANCE_ID_FILE))" --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)"
 	@echo "== user-data is installing Docker + nginx and the stack (15–40 min first boot). Wait, then:"
 	@echo "   make wait    # poll nginx until UI is up"
+	@if [ -n "$(DUCK_DNS_DOMAIN)" ]; then echo "   browse https://$(DUCK_DNS_DOMAIN).duckdns.org (certbot runs during first boot; give it a few min)"; fi
 
 wait: ## poll until http://<ip>/ answers 200 (first boot is slow: 15-40 min Maven builds)
 	@test -f $(INSTANCE_ID_FILE) || { echo "provision first"; exit 1; }
@@ -116,10 +137,10 @@ stop: ## stop the instance (only EBS bills while stopped)
 	@test -f $(INSTANCE_ID_FILE) || { echo "provision first"; exit 1; }
 	$(AWS) ec2 stop-instances --region $(REGION) --instance-ids "$$(cat $(INSTANCE_ID_FILE))"
 
-deploy: ## git pull + rebuild services + frontend on the host (full redeploy)
+deploy: ## git pull + rebuild all services incl. the frontend image on the host (full redeploy)
 	@test -f $(INSTANCE_ID_FILE) || { echo "provision first"; exit 1; }
 	ssh -i $(KEY_FILE) -o StrictHostKeyChecking=accept-new $(SSH_USER)@$$($(MAKE) -s ip) \
-	  'cd /srv/solara && git pull --ff-only && docker compose up -d --build && npm --prefix frontend ci && npm --prefix frontend run build && nginx -s reload'
+	  'cd /srv/solara && git pull --ff-only && docker compose up -d --build'
 
 open-ssh: ## (re)open port 22 to your current IP (after a network change)
 	$(AWS) ec2 authorize-security-group-ingress --region $(REGION) --group-id "$$(cat $(SG_ID_FILE))" \
