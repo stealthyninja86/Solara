@@ -1,12 +1,13 @@
 package com.solara.insightservice.repository;
 
-import com.solara.insightservice.dto.request.SimilarCategorization;
+import com.solara.insightservice.dto.internal.SimilarCategorization;
 import com.solara.insightservice.model.MerchantProfile;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -28,6 +29,7 @@ public interface MerchantProfileRepository extends JpaRepository<MerchantProfile
                                             @Param("minSimilarity") double minSimilarity);
 
     @Modifying
+    @Transactional
     @Query(value = """
         INSERT INTO merchant_profiles (id, user_id, merchant, normalized_merchant, description, category, embedding, updated_at)
         VALUES (gen_random_uuid(), :userId, :merchant, :normalizedMerchant, :description, :category,
@@ -51,6 +53,7 @@ public interface MerchantProfileRepository extends JpaRepository<MerchantProfile
     Optional<MerchantProfile> findByUserIdAndNormalizedMerchant(UUID userId, String normalizedMerchant);
 
     @Modifying
+    @Transactional
     @Query(value = """
         DELETE FROM merchant_profiles
         WHERE user_id = :userId AND normalized_merchant = :normalizedMerchant

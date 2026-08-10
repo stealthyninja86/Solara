@@ -48,6 +48,8 @@ spring:
                   args:
                     name: insightServiceCB
                     fallbackUri: forward:/fallback/insight
+              metadata:
+                response-timeout: 120000
 
             - id: insight-service-insights
               uri: http://insight-service:4003
@@ -58,6 +60,8 @@ spring:
                   args:
                     name: insightServiceCB
                     fallbackUri: forward:/fallback/insight
+              metadata:
+                response-timeout: 120000
 
           default-filters:
             - name: RequestRateLimiter
@@ -140,6 +144,10 @@ management:
       export:
         otlp:
           endpoint: http://otel-collector:4318/v1/traces
+  otlp:
+    metrics:
+      export:
+        enabled: false
   tracing:
     sampling:
       probability: 1.0

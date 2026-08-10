@@ -2,6 +2,7 @@ package com.solara.transactionservice.controller;
 
 import com.solara.transactionservice.dto.request.CreateTransactionRequest;
 import com.solara.transactionservice.dto.request.UpdateTransactionRequest;
+import com.solara.transactionservice.dto.response.BulkImportResponse;
 import com.solara.transactionservice.dto.response.BulkJobResponse;
 import com.solara.transactionservice.dto.response.TransactionResponse;
 import com.solara.transactionservice.model.ImportJob;
@@ -22,7 +23,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -61,39 +61,43 @@ public class TransactionController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<TransactionResponse> findById(@PathVariable UUID id) {
-        log.debug("findById requested: id={}", id);
-        TransactionResponse response = transactionService.findById(id);
+    public ResponseEntity<TransactionResponse> findById(@PathVariable UUID id,
+                                                        @RequestParam("userId") UUID userId) {
+        log.debug("findById requested: id={}, userId={}", id, userId);
+        TransactionResponse response = transactionService.findById(id, userId);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping
-    public ResponseEntity<List<TransactionResponse>> findAll() {
-        List<TransactionResponse> responses = transactionService.findAll();
-        log.debug("findAll returned: count={}", responses.size());
+    public ResponseEntity<List<TransactionResponse>> findAll(
+            @RequestParam("userId") UUID userId) {
+        List<TransactionResponse> responses = transactionService.findAll(userId);
+        log.debug("findAll returned: userId={}, count={}", userId, responses.size());
         return ResponseEntity.ok(responses);
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<TransactionResponse> update(
             @PathVariable UUID id,
+            @RequestParam("userId") UUID userId,
             @Valid @RequestBody UpdateTransactionRequest request) {
-        log.info("update requested: id={}, merchant={}", id, request.merchant());
-        TransactionResponse response = transactionService.update(id, request);
+        log.info("update requested: id={}, userId={}, merchant={}", id, userId, request.merchant());
+        TransactionResponse response = transactionService.update(id, userId, request);
         log.info("update completed: id={}", response.id());
         return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable UUID id) {
-        log.info("delete requested: id={}", id);
-        transactionService.delete(id);
+    public ResponseEntity<Void> delete(@PathVariable UUID id,
+                                       @RequestParam("userId") UUID userId) {
+        log.info("delete requested: id={}, userId={}", id, userId);
+        transactionService.delete(id, userId);
         log.info("delete completed: id={}", id);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/bulk")
-    public ResponseEntity<Map<String, UUID>> bulkImport(
+    public ResponseEntity<BulkImportResponse> bulkImport(
             @RequestParam("userId") UUID userId,
             @RequestBody @Valid List<@Valid CreateTransactionRequest> requests) {
         log.info("bulk JSON import requested: userId={}, rowCount={}", userId, requests.size());
@@ -102,11 +106,11 @@ public class TransactionController {
         bulkImportService.processJsonImport(job.getId(), userId, requests);
         log.info("bulk JSON import accepted: jobId={}, userId={}", job.getId(), userId);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .body(Map.of("jobId", job.getId()));
+                .body(new BulkImportResponse(job.getId()));
     }
 
     @PostMapping("/bulk/upload")
-    public ResponseEntity<Map<String, UUID>> bulkUpload(
+    public ResponseEntity<BulkImportResponse> bulkUpload(
             @RequestParam("userId") UUID userId,
             @RequestParam("file") MultipartFile file) throws IOException {
 
@@ -126,22 +130,27 @@ public class TransactionController {
         bulkImportService.processCsvImport(job.getId(), userId,
                 file.getInputStream());
 
-        log.info("bulk CSV import accepted: jobId={}, userId={}", job.getId(), userId);
+        log.info("bulk CSV upload accepted: jobId={}, userId={}", job.getId(), userId);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .body(Map.of("jobId", job.getId()));
+                .body(new BulkImportResponse(job.getId()));
     }
 
     @GetMapping("/bulk/{jobId}")
-    public ResponseEntity<BulkJobResponse> getBulkJobStatus(@PathVariable UUID jobId) {
-        log.debug("bulk status requested: jobId={}", jobId);
+    public ResponseEntity<BulkJobResponse> getBulkJobStatus(@PathVariable UUID jobId,
+                                                            @RequestParam("userId") UUID userId) {
+        log.debug("bulk status requested: jobId={}, userId={}", jobId, userId);
         ImportJob job = importJobRepository.findById(jobId)
                 .orElseThrow(() -> new IllegalArgumentException("Import job not found: " + jobId));
+        if (!job.getUserId().equals(userId)) {
+            throw new IllegalArgumentException("Import job not found: " + jobId);
+        }
         log.debug("bulk status returned: jobId={}, status={}, imported={}, failed={}",
                 jobId, job.getStatus(), job.getImportedRows(), job.getFailedRows());
         return ResponseEntity.ok(new BulkJobResponse(
                 job.getId(), job.getStatus(),
                 job.getTotalRows(), job.getImportedRows(), job.getFailedRows(),
                 job.getErrorReport(),
-                job.getCreatedAt(), job.getCompletedAt()));
+                job.getCreatedAt(), job.getCompletedAt(),
+                job.getMinDate(), job.getMaxDate()));
     }
 }

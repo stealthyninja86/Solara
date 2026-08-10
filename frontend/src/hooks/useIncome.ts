@@ -8,12 +8,19 @@ interface IncomeResponse {
   monthlyIncome: number;
 }
 
-export function useIncome(refreshKey: number = 0) {
+export function useIncome(refreshKey: number = 0, month?: number, year?: number) {
   const [monthlyIncome, setMonthlyIncome] = useState(0);
   const [hasIncome, setHasIncome] = useState(false);
 
   const fetchIncome = useCallback(async () => {
-    const params = new URLSearchParams({ userId: getUserId() ?? DEFAULT_USER_ID });
+    const now = new Date();
+    const m = month ?? now.getMonth();
+    const y = year ?? now.getFullYear();
+    const at = `${y}-${String(m + 1).padStart(2, "0")}-01`;
+    const params = new URLSearchParams({
+      userId: getUserId() ?? DEFAULT_USER_ID,
+      at,
+    });
     try {
       const res = await api(`/api/v1/insights/income?${params}`);
       if (res.ok) {
@@ -25,7 +32,7 @@ export function useIncome(refreshKey: number = 0) {
     } catch {
       // silent
     }
-  }, []);
+  }, [month, year]);
 
   useEffect(() => {
     fetchIncome();
@@ -33,7 +40,14 @@ export function useIncome(refreshKey: number = 0) {
 
   async function setMonthlyIncomeValue(value: number): Promise<boolean> {
     try {
-      const params = new URLSearchParams({ userId: getUserId() ?? DEFAULT_USER_ID });
+      const now = new Date();
+      const m = month ?? now.getMonth();
+      const y = year ?? now.getFullYear();
+      const at = `${y}-${String(m + 1).padStart(2, "0")}-01`;
+      const params = new URLSearchParams({
+        userId: getUserId() ?? DEFAULT_USER_ID,
+        at,
+      });
       const res = await api(`/api/v1/insights/income?${params}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

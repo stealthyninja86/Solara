@@ -15,8 +15,21 @@
   --color-cat-6: #eab308;
   --color-cat-7: #06b6d4;
   --color-cat-8: #ec4899;
+  --color-badge-subscription: #22c55e;
+  --color-badge-subscription-border: rgba(34, 197, 94, 0.5);
+  --color-badge-subscription-bg: rgba(34, 197, 94, 0.1);
+  --color-badge-bill: #3b82f6;
+  --color-badge-bill-border: rgba(59, 130, 246, 0.5);
+  --color-badge-bill-bg: rgba(59, 130, 246, 0.1);
+  --color-badge-rent: #06b6d4;
+  --color-badge-rent-border: rgba(6, 182, 212, 0.5);
+  --color-badge-rent-bg: rgba(6, 182, 212, 0.1);
+  --color-badge-emi: #a855f7;
+  --color-badge-emi-border: rgba(168, 85, 247, 0.5);
+  --color-badge-emi-bg: rgba(168, 85, 247, 0.1);
   --color-error-bg: rgba(220, 38, 38, 0.08);
   --color-error-border: rgba(220, 38, 38, 0.2);
+  --animate-ping-slow: ping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
 :root {
@@ -59,6 +72,18 @@
   --color-cat-6: #eab308;
   --color-cat-7: #06b6d4;
   --color-cat-8: #ec4899;
+  --color-badge-subscription: #22c55e;
+  --color-badge-subscription-border: rgba(34, 197, 94, 0.5);
+  --color-badge-subscription-bg: rgba(34, 197, 94, 0.1);
+  --color-badge-bill: #3b82f6;
+  --color-badge-bill-border: rgba(59, 130, 246, 0.5);
+  --color-badge-bill-bg: rgba(59, 130, 246, 0.1);
+  --color-badge-rent: #06b6d4;
+  --color-badge-rent-border: rgba(6, 182, 212, 0.5);
+  --color-badge-rent-bg: rgba(6, 182, 212, 0.1);
+  --color-badge-emi: #a855f7;
+  --color-badge-emi-border: rgba(168, 85, 247, 0.5);
+  --color-badge-emi-bg: rgba(168, 85, 247, 0.1);
   --bg: #ffffff;
   --bg-deep: #f4f4f5;
   --bg-subtle: #f4f4f5;
@@ -129,6 +154,18 @@
   --color-cat-6: #eab308;
   --color-cat-7: #06b6d4;
   --color-cat-8: #ec4899;
+  --color-badge-subscription: #22c55e;
+  --color-badge-subscription-border: rgba(34, 197, 94, 0.5);
+  --color-badge-subscription-bg: rgba(34, 197, 94, 0.1);
+  --color-badge-bill: #3b82f6;
+  --color-badge-bill-border: rgba(59, 130, 246, 0.5);
+  --color-badge-bill-bg: rgba(59, 130, 246, 0.1);
+  --color-badge-rent: #06b6d4;
+  --color-badge-rent-border: rgba(6, 182, 212, 0.5);
+  --color-badge-rent-bg: rgba(6, 182, 212, 0.1);
+  --color-badge-emi: #a855f7;
+  --color-badge-emi-border: rgba(168, 85, 247, 0.5);
+  --color-badge-emi-bg: rgba(168, 85, 247, 0.1);
   --bg: #000000;
   --bg-deep: #09090b;
   --bg-subtle: #09090b;
@@ -181,7 +218,7 @@ input[type="number"] {
 }
 
 html {
-  font-size: 15px;
+  font-size: 0.9rem;
   scroll-behavior: smooth;
   scroll-padding-top: 5rem;
   transition: color-scheme 0.15s;
@@ -203,7 +240,29 @@ body {
   align-items: flex-start;
   padding: 1.5rem 0.75rem;
   min-height: 100vh;
+  position: relative;
 }
+
+#root > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Typography scale — use these instead of hardcoding text-[0.xrem] */
+.text-page   { font-size: 1.1rem; font-weight: 700; color: var(--color-text); }
+.text-card   { font-size: 1rem;   font-weight: 500; color: var(--color-text); }
+.text-section{ font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text); }
+.text-body   { font-size: 0.9rem;  color: var(--color-text); }
+.text-caption{ font-size: 0.85rem; color: var(--color-text); }
+.text-label  { font-size: 0.75rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.12em; color: var(--color-text); }
+.text-small  { font-size: 0.75rem; color: var(--color-text-muted); }
+.text-tiny   { font-size: 0.65rem; color: var(--color-text-muted); }
+
+/* Muted variants for secondary content */
+.text-page-muted   { font-size: 1.1rem; font-weight: 700; color: var(--color-text-muted); }
+.text-card-muted   { font-size: 1rem;   font-weight: 500; color: var(--color-text-muted); }
+.text-body-muted   { font-size: 0.9rem;  color: var(--color-text-muted); }
+.text-caption-muted{ font-size: 0.85rem; color: var(--color-text-muted); }
 
 header {
   display: flex;
@@ -227,7 +286,7 @@ h1 {
   letter-spacing: -0.01em;
 }
 
-.card {
+.card-1 {
   width: 100%;
   max-width: none;
   background: var(--surface);
@@ -236,14 +295,160 @@ h1 {
   padding: 1.75rem;
   margin-bottom: 1.5rem;
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-  animation: slide-up-fade 0.4s ease-out both;
-  animation-delay: var(--card-delay, 0ms);
+}
+
+.card-1:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-dim);
+  box-shadow: 0 8px 24px var(--color-card-shadow);
+}
+
+.card-1 h2 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-bottom: 1.25rem;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARD — Glass-morphism (default)
+   ═══════════════════════════════════════════════════════════ */
+.card {
+  width: 100%;
+  max-width: none;
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  backdrop-filter: blur(var(--blur-xl, 24px)) saturate(1.4);
+  -webkit-backdrop-filter: blur(var(--blur-xl, 24px)) saturate(1.4);
+  border: 1px solid color-mix(in srgb, var(--color-text) 10%, transparent);
+  border-radius: 14px;
+  padding: 1.75rem;
+  margin-bottom: 1.5rem;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-text) 6%, transparent),
+    0 1px 3px var(--color-card-shadow),
+    0 4px 12px color-mix(in srgb, var(--color-card-shadow) 30%, transparent);
+  transition: transform 0.25s cubic-bezier(0.22,1,0.36,1), box-shadow 0.25s, border-color 0.25s;
 }
 
 .card:hover {
   transform: translateY(-2px);
-  border-color: var(--accent-dim);
-  box-shadow: 0 8px 24px var(--color-card-shadow);
+  border-color: color-mix(in srgb, var(--color-text) 16%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-text) 8%, transparent),
+    0 4px 16px color-mix(in srgb, var(--color-card-shadow) 60%, transparent),
+    0 12px 40px var(--color-card-shadow);
+}
+
+.glass {
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-text) 6%, transparent),
+    0 1px 3px var(--color-card-shadow);
+}
+
+.glass:hover {
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  border-color: color-mix(in srgb, var(--color-text) 10%, transparent);
+}
+
+.button {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.55rem 1.125rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  color: var(--color-text);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-text) 6%, transparent),
+    0 1px 3px var(--color-card-shadow);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  width: auto;
+  margin: 0;
+}
+
+.button:hover {
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-text) 14%, transparent);
+}
+
+.text-button {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 0.8rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+.text-button:hover {
+  color: var(--color-text);
+}
+
+.lucide {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.button-primary {
+  background: color-mix(in srgb, var(--color-text) 85%, transparent);
+  color: var(--color-bg);
+  border-color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+
+.button-primary:hover {
+  background: color-mix(in srgb, var(--color-text) 90%, transparent);
+  border-color: var(--color-text);
+}
+
+.button-secondary {
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  color: var(--color-text);
+  border-color: color-mix(in srgb, var(--color-text) 10%, transparent);
+}
+
+.button-secondary:hover {
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-text) 16%, transparent);
+}
+
+.button-danger {
+  background: color-mix(in srgb, var(--color-error) 15%, transparent);
+  color: var(--color-error);
+  border-color: color-mix(in srgb, var(--color-error) 30%, transparent);
+}
+
+.button-danger:hover {
+  background: color-mix(in srgb, var(--color-error) 25%, transparent);
+  border-color: var(--color-error);
+}
+
+.button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
+  outline-offset: 2px;
+}
+
+.button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .card h2 {
@@ -252,6 +457,157 @@ h1 {
   letter-spacing: 0.08em;
   color: var(--text-dim);
   margin-bottom: 1.25rem;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARD VARIANT 2 — Inner shadow + subtle gradient
+   ═══════════════════════════════════════════════════════════ */
+.card-depth {
+  width: 100%;
+  max-width: none;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 3%, transparent), transparent), var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1.75rem;
+  margin-bottom: 1.5rem;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-bg) 6%, transparent), 0 1px 3px var(--color-card-shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.card-depth:hover {
+  transform: translateY(-1px);
+  border-color: var(--color-accent-dim);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-bg) 6%, transparent), 0 4px 16px var(--color-card-shadow);
+}
+
+.card-depth h2 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-bottom: 1.25rem;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARD VARIANT 3 — Elevated (no border, pure shadow)
+   ═══════════════════════════════════════════════════════════ */
+.card-elevated {
+  width: 100%;
+  max-width: none;
+  background: var(--color-surface);
+  border: none;
+  border-radius: 16px;
+  padding: 1.75rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 8px var(--color-card-shadow), 0 8px 24px color-mix(in srgb, var(--color-card-shadow) 50%, transparent);
+  transition: transform 0.25s cubic-bezier(0.22,1,0.36,1), box-shadow 0.25s;
+}
+
+.card-elevated:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 12px var(--color-card-shadow), 0 16px 48px color-mix(in srgb, var(--color-card-shadow) 80%, transparent);
+}
+
+.card-elevated h2 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-bottom: 1.25rem;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   HOW IT WORKS — collapsible explainer
+   ═══════════════════════════════════════════════════════════ */
+.how-it-works-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent !important;
+  padding: 0;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-family: var(--font);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.how-it-works-toggle:hover {
+  background: transparent !important;
+}
+
+.how-it-works-toggle:focus,
+.how-it-works-toggle:focus-visible {
+  background: transparent !important;
+  outline: none;
+  box-shadow: none;
+}
+
+.how-it-works-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.how-it-works-chevron {
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.how-it-works-chevron--open {
+  transform: rotate(180deg);
+}
+
+.how-it-works-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.how-it-works-panel--open {
+  grid-template-rows: 1fr;
+}
+
+.how-it-works-panel-inner {
+  overflow: hidden;
+  background: var(--color-bg-deep);
+  border-radius: 0.5rem;
+  padding: 0.15rem 0;
+}
+
+.how-it-works-panel--open .how-it-works-panel-inner {
+  padding-top: 0.5rem;
+  padding-bottom: 0.25rem;
+}
+
+.how-it-works-item {
+  display: block;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.how-it-works-item--bordered {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.how-it-works-item-title {
+  display: block;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.15rem;
+}
+
+.how-it-works-item-desc {
+  display: block;
+  color: var(--text);
+  text-align: left;
 }
 
 .form-group {
@@ -326,22 +682,23 @@ input::placeholder {
 }
 
 button {
-  width: 100%;
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
   font-family: var(--font);
   font-size: 0.85rem;
   font-weight: 600;
   padding: 0.7rem;
-  background: var(--accent);
-  color: var(--bg);
-  border: none;
+  color: var(--color-text);
   border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.15s ease;
   margin-top: 0.5rem;
+  width: auto;
 }
 
 button:hover {
-  background: var(--accent-dim);
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-text) 14%, transparent);
 }
 
 button:disabled {
@@ -350,13 +707,14 @@ button:disabled {
 }
 
 .btn-submit {
-  background: var(--accent) !important;
-  color: var(--bg) !important;
-  border: 1px solid var(--border) !important;
+  background: color-mix(in srgb, var(--color-text) 85%, transparent) !important;
+  color: var(--color-bg) !important;
+  border: 1px solid color-mix(in srgb, var(--color-text) 70%, transparent) !important;
 }
 
 .btn-submit:hover:not(:disabled) {
-  background: var(--accent-dim) !important;
+  background: color-mix(in srgb, var(--color-text) 90%, transparent) !important;
+  border-color: var(--color-text) !important;
 }
 
 .btn-loading {
@@ -545,28 +903,30 @@ hr {
 
 .category-chip {
   all: unset;
+  box-sizing: border-box;
   font-family: var(--font);
   font-size: 0.7rem;
   padding: 0.35rem 0.65rem;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
   border-radius: 20px;
-  color: var(--text);
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  color: var(--color-text);
   cursor: pointer;
   transition: all 0.15s;
   width: auto;
   margin: 0;
-  background: transparent;
+  white-space: nowrap;
 }
 
 .category-chip:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: color-mix(in srgb, var(--color-accent) 50%, transparent);
+  color: var(--color-accent);
 }
 
 .category-chip.active {
-  border-color: var(--accent);
-  background: var(--bg-hover);
-  color: var(--accent);
+  border-color: color-mix(in srgb, var(--color-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent);
 }
 
 .modal-actions {
@@ -583,18 +943,30 @@ hr {
 
 .modal-close {
   all: unset;
+  box-sizing: border-box;
   position: absolute;
   top: 0.75rem;
   right: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.75rem;
+  width: 1.75rem;
   font-size: 0.9rem;
-  color: var(--text-dim);
+  color: var(--color-text-secondary);
   cursor: pointer;
-  padding: 0.3rem;
+  border: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  border-radius: 9999px;
   line-height: 1;
-  border-radius: 4px;
-  width: auto;
   margin: 0;
-  background: transparent;
+  transition: all 0.15s ease;
+}
+
+.modal-close:hover {
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  border-color: color-mix(in srgb, var(--color-error) 30%, transparent);
 }
 
 .modal-close:hover {
@@ -640,18 +1012,31 @@ hr {
 }
 
 .btn-primary {
-  background: var(--accent);
-  color: var(--bg);
+  background: color-mix(in srgb, var(--color-text) 85%, transparent);
+  color: var(--color-bg);
+  border: 1px solid color-mix(in srgb, var(--color-text) 70%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-text) 6%, transparent),
+    0 1px 3px var(--color-card-shadow);
+}
+
+.btn-primary:hover {
+  background: color-mix(in srgb, var(--color-text) 90%, transparent);
+  border-color: var(--color-text);
 }
 
 .btn-secondary {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text);
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  color: var(--color-text);
+  border: 1px solid color-mix(in srgb, var(--color-text) 10%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-text) 6%, transparent),
+    0 1px 3px var(--color-card-shadow);
 }
 
 .btn-secondary:hover {
-  border-color: var(--text-dim);
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-text) 16%, transparent);
 }
 
 .loading-text,
@@ -662,11 +1047,87 @@ hr {
   padding: 1rem 0;
 }
 
+/* ── Transaction table header + controls ── */
+.tx-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.tx-page-size {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.tx-page-size-label {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+
+.tx-page-size-select {
+  font-family: var(--font);
+  font-size: 0.65rem;
+  padding: 0.2rem 0.4rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+}
+
+.tx-col-num {
+  text-align: center;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+}
+
+.tx-col-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.tx-col-sortable:hover {
+  color: var(--text);
+}
+
+.tx-col-amount {
+  text-align: right;
+  padding-right: 0.75rem;
+}
+
+.tx-badge {
+  margin-left: 0.35rem;
+  display: inline-block;
+  border-radius: 4px;
+  border: 1px solid;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
 .transaction-row--filters {
   padding: 0.25rem 0;
   border-bottom: 1px solid var(--border);
   background: var(--bg-hover);
   font-size: 0.65rem;
+}
+
+.transaction-row--header {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.65rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.transaction-row--header:hover {
+  background: color-mix(in srgb, var(--color-text) 2%, transparent);
 }
 
 .filter-input {
@@ -748,7 +1209,7 @@ hr {
   width: 100%;
   overflow-x: auto;
   font-size: 0.75rem;
-  --grid-tpl: 2.2rem 2fr 0.8fr 1.2fr 0.7fr 0.6fr 0.8fr 0.8fr 1.8rem;
+  --grid-tpl: 2.5rem 3fr 1.2fr 1.5fr 1fr 0.8fr 1.5fr 1.5fr 2rem;
 }
 
 .transaction-row {
@@ -824,21 +1285,18 @@ hr {
 }
 
 .btn-delete {
-  all: unset;
   font-size: 0.75rem;
   color: var(--text-dim);
-  cursor: pointer;
   padding: 0.15rem;
   line-height: 1;
   border-radius: 4px;
-  width: auto;
-  margin: 0;
-  background: transparent;
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+  border: none;
 }
 
 .btn-delete:hover {
-  color: var(--error);
-  background: var(--color-error-hover);
+  color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 15%, transparent);
 }
 
 .pagination {
@@ -854,14 +1312,10 @@ hr {
   margin: 0;
   padding: 0.4rem 0.75rem;
   font-size: 0.75rem;
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text);
 }
 
 .pagination button:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
+  color: var(--color-accent);
 }
 
 .page-info {
@@ -874,11 +1328,21 @@ hr {
   transition: background 0.15s, border-left 0.15s;
   border-radius: 4px;
   border-left: 2px solid transparent;
+  font-weight: 600;
 }
 
 .transaction-row--data:hover {
   background: var(--bg-hover);
   border-left-color: var(--accent);
+}
+
+.transaction-row--highlight {
+  animation: highlight-flash 3s ease-out forwards;
+}
+
+@keyframes highlight-flash {
+  0% { background: rgba(74, 222, 128, 0.15); border-left-color: rgba(74, 222, 128, 0.5); }
+  100% { background: transparent; border-left-color: var(--border-subtle); }
 }
 
 .modal-detail {
@@ -914,6 +1378,14 @@ hr {
   color: var(--text);
   text-align: right;
   font-size: 0.78rem;
+}
+
+.review-description-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  justify-content: flex-end;
 }
 
 .detail-field .value.mono {
@@ -962,10 +1434,34 @@ hr {
 
   .card {
     padding: 1.25rem;
+    border-radius: 10px;
+  }
+
+  .card-1 {
+    padding: 1.25rem;
     border-radius: 8px;
   }
 
-  .card h2 {
+  .card-depth {
+    padding: 1.25rem;
+    border-radius: 8px;
+  }
+
+  .card-elevated {
+    padding: 1.25rem;
+    border-radius: 12px;
+  }
+
+.card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--color-text) 16%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-text) 8%, transparent),
+    0 4px 16px color-mix(in srgb, var(--color-card-shadow) 60%, transparent),
+    0 12px 40px var(--color-card-shadow);
+}
+
+.card h2 {
     margin-bottom: 1rem;
   }
 
@@ -974,12 +1470,28 @@ hr {
     gap: 0;
   }
 
+  /* ── Transaction table: horizontal scroll ── */
   .transaction-table {
+    overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
 
   .transaction-row {
-    min-width: 640px;
+    min-width: 800px;
+  }
+
+  .pagination {
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+
+  .pagination button {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.7rem;
+  }
+
+  .page-info {
+    font-size: 0.65rem;
   }
 
   .modal {
@@ -1009,6 +1521,21 @@ hr {
   .card {
     padding: 0.875rem;
     border-radius: 6px;
+  }
+
+  .card-1 {
+    padding: 0.875rem;
+    border-radius: 8px;
+  }
+
+  .card-depth {
+    padding: 0.875rem;
+    border-radius: 6px;
+  }
+
+  .card-elevated {
+    padding: 0.875rem;
+    border-radius: 10px;
   }
 
   input,
@@ -1158,7 +1685,10 @@ hr {
   container-type: inline-size;
 }
 
-.cards-row .card {
+.cards-row .card,
+.cards-row .card-1,
+.cards-row .card-depth,
+.cards-row .card-elevated {
   min-width: 0;
 }
 
@@ -1196,21 +1726,18 @@ hr {
 }
 
 .btn-edit-budget {
-  all: unset;
   font-size: 1.1rem;
   color: var(--text-dim);
-  cursor: pointer;
-  width: auto;
-  margin: 0;
   padding: 0.15rem;
   line-height: 1;
   border-radius: 3px;
-  background: transparent;
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+  border: none;
 }
 
 .btn-edit-budget:hover {
-  color: var(--text);
-  background: var(--bg-hover);
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
 }
 
 .budget-ring-wrapper {
@@ -1238,24 +1765,19 @@ hr {
 }
 
 .btn-budget-set {
-  all: unset;
   width: 100%;
-  font-family: var(--font);
-  font-size: 0.75rem;
   text-align: center;
   padding: 0.55rem 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
-  margin: 0;
-  background: transparent;
+  font-size: 0.75rem;
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-text) 6%, transparent),
+    0 1px 3px var(--color-card-shadow);
 }
 
 .btn-budget-set:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  color: var(--color-accent);
 }
 
 .budget-input-row {
@@ -1288,39 +1810,30 @@ hr {
 }
 
 .btn-budget-save {
-  all: unset;
-  font-family: var(--font);
   font-size: 0.7rem;
-  font-weight: 600;
   padding: 0.45rem 0.65rem;
-  background: var(--accent);
-  color: var(--bg);
-  border-radius: 6px;
-  cursor: pointer;
-  white-space: nowrap;
-  width: auto;
-  margin: 0;
+  background: color-mix(in srgb, var(--color-text) 85%, transparent);
+  color: var(--color-bg);
+  border: 1px solid color-mix(in srgb, var(--color-text) 70%, transparent);
 }
 
 .btn-budget-save:hover {
-  background: var(--accent-dim);
+  background: color-mix(in srgb, var(--color-text) 90%, transparent);
+  border-color: var(--color-text);
 }
 
 .btn-budget-cancel {
-  all: unset;
   font-size: 0.8rem;
   color: var(--text-dim);
-  cursor: pointer;
   padding: 0.3rem;
   line-height: 1;
-  width: auto;
-  margin: 0;
   border-radius: 4px;
-  background: transparent;
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+  border: none;
 }
 
 .btn-budget-cancel:hover {
-  color: var(--error);
+  color: var(--color-error);
   background: var(--color-error-hover);
 }
 
@@ -1332,24 +1845,19 @@ hr {
 }
 
 .btn-budget-exceeded {
-  all: unset;
   width: 100%;
-  font-family: var(--font);
   font-size: 0.7rem;
   text-align: center;
   padding: 0.45rem 0;
-  border: 1px solid var(--color-error-border-strong);
+  border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent);
   border-radius: 6px;
-  color: var(--error);
-  cursor: pointer;
-  transition: border-color 0.15s;
-  margin: 0;
-  background: var(--color-error-bg-subtle);
+  color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
 }
 
 .btn-budget-exceeded:hover {
-  border-color: var(--error);
-  background: var(--color-error-hover);
+  border-color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 20%, transparent);
 }
 
 /* ── Bulk Import ── */
@@ -1453,7 +1961,22 @@ hr {
 /* Entrance animations */
 @keyframes slide-up-fade {
   from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes typewriter-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.typewriter-cursor {
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  background: var(--color-accent);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: typewriter-blink 0.8s step-end infinite;
 }
 
 @keyframes fade-out {
@@ -1692,18 +2215,13 @@ hr {
 }
 
 .landing-cta-btn {
-  cursor: pointer;
-  border: none;
   border-radius: 8px;
   padding: 0.5rem 1.125rem;
   font-size: 0.8rem;
-  font-weight: 600;
-  font-family: var(--font);
-  background: var(--color-text);
+  background: color-mix(in srgb, var(--color-text) 85%, transparent);
   color: var(--color-bg);
-  transition: opacity 0.15s var(--landing-transition-ease), transform 0.15s var(--landing-transition-ease);
-  width: auto;
-  margin: 0;
+  border-color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  transform: none;
 }
 
 @media (max-width: 639px) {
@@ -1714,7 +2232,8 @@ hr {
 }
 
 .landing-cta-btn:hover {
-  opacity: 0.85;
+  background: color-mix(in srgb, var(--color-text) 90%, transparent);
+  border-color: var(--color-text);
   transform: translateY(-1px);
 }
 
@@ -1724,22 +2243,17 @@ hr {
 }
 
 .landing-ghost-btn {
-  cursor: pointer;
-  border: 1px solid var(--color-border);
+  border: 1px solid color-mix(in srgb, var(--color-text) 10%, transparent);
   border-radius: 8px;
   padding: 0.75rem 1.75rem;
   font-size: 0.85rem;
-  font-weight: 600;
-  font-family: var(--font);
-  background: transparent;
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
   color: var(--color-text-secondary);
-  transition: border-color 0.15s var(--landing-transition-ease), color 0.15s var(--landing-transition-ease), transform 0.15s var(--landing-transition-ease);
-  width: auto;
-  margin: 0;
+  transform: none;
 }
 
 .landing-ghost-btn:hover {
-  border-color: var(--color-text-secondary);
+  border-color: color-mix(in srgb, var(--color-text) 16%, transparent);
   color: var(--color-text);
   transform: translateY(-1px);
 }
@@ -2161,4 +2675,38 @@ hr {
 @keyframes sun-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.15); opacity: 0.8; }
+}
+.uncategorized-tooltip {
+  position: relative;
+  cursor: help;
+  border-bottom: 1px dashed var(--color-text-muted);
+}
+
+.uncategorized-tooltip::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  width: max-content;
+  max-width: 240px;
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-deep);
+  color: var(--color-text);
+  font-size: 0.7rem;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.uncategorized-tooltip:hover::after {
+  visibility: visible;
+  opacity: 1;
 }

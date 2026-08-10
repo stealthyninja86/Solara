@@ -7,6 +7,8 @@ interface SpendData {
   totalSpent: number;
   monthlyBudget: number;
   safeToSpend: number;
+  recurringCosts: number;
+  recurringCostsByKind: Record<string, number>;
 }
 
 function toIsoDate(year: number, month: number): string {
@@ -18,6 +20,8 @@ export function useSpendAnalysis(refreshKey = 0, month?: number, year?: number) 
     totalSpent: 0,
     monthlyBudget: 0,
     safeToSpend: 0,
+    recurringCosts: 0,
+    recurringCostsByKind: {},
   });
 
   const fetchAnalysis = useCallback(async () => {
@@ -38,6 +42,8 @@ export function useSpendAnalysis(refreshKey = 0, month?: number, year?: number) 
           totalSpent: budget.totalSpent,
           monthlyBudget: budget.monthlyBudget,
           safeToSpend: safe.safeToSpend,
+          recurringCosts: safe.recurringCosts ?? 0,
+          recurringCostsByKind: safe.recurringCostsByKind ?? {},
         });
       }
     } catch {

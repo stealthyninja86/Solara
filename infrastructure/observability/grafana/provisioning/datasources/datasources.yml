@@ -15,6 +15,15 @@ datasources:
     url: http://tempo:3200
     isDefault: false
     editable: false
+    jsonData:
+      tracesToLogs:
+        datasourceUid: loki
+        tags:
+          - trace_id
+        filterByTraceID: true
+        filterBySpanID: false
+        spanStartTimeShift: '1h'
+        spanEndTimeShift: '-1h'
   - name: Loki
     uid: loki
     type: loki
@@ -22,3 +31,9 @@ datasources:
     url: http://loki:3100
     isDefault: false
     editable: false
+    jsonData:
+      derivedFields:
+        - datasourceUid: tempo
+          matcherRegex: '"traceId":"([0-9a-f]{32})"'
+          name: trace_id
+          url: '$${__value.raw}'

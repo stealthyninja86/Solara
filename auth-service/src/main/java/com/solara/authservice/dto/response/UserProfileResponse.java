@@ -6,6 +6,8 @@ public record UserProfileResponse(
         UUID id,
         String email,
         String firstName,
-        String lastName
+        String lastName,
+        String iconMode,
+        boolean llmEnabled
 ) {
 }

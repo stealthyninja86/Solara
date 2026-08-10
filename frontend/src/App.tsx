@@ -2,13 +2,13 @@ import { useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
 import { ThemeProvider } from "./context/ThemeProvider";
-import { LandingPage } from "./components/LandingPage";
-import { LoginPage } from "./components/LoginPage";
-import { Dashboard } from "./components/Dashboard";
-import { DashboardOverview } from "./components/DashboardOverview";
-import { DashboardLayout } from "./components/DashboardLayout";
-import { Reports as DashboardReports } from "./components/Reports";
-import { DashboardSettings } from "./components/DashboardSettings";
+import { LandingPage } from "./pages/LandingPage";
+import { LoginPage } from "./pages/LoginPage";
+import { Dashboard } from "./pages/Dashboard";
+import { DashboardOverview } from "./pages/DashboardOverview";
+import { DashboardLayout } from "./components/layout/DashboardLayout";
+import { Reports as DashboardReports } from "./pages/Reports";
+import { DashboardSettings } from "./pages/DashboardSettings";
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const auth = useAuth();

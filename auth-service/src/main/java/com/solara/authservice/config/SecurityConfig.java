@@ -10,10 +10,15 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.beans.factory.annotation.Value;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    @Value("${app.internal-api-key}")
+    private String internalApiKey;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -36,6 +41,21 @@ public class SecurityConfig {
 
     @Bean
     @Order(2)
+    public SecurityFilterChain internalSettingsEndpoints(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher("/auth/users/*/settings")
+                .csrf(csrf -> csrf.disable())
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .addFilterBefore(new ServiceApiKeyFilter(internalApiKey), UsernamePasswordAuthenticationFilter.class)
+                .authorizeHttpRequests(auth -> auth
+                        .anyRequest().permitAll()
+                );
+        return http.build();
+    }
+
+    @Bean
+    @Order(3)
     public SecurityFilterChain protectedEndpoints(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())

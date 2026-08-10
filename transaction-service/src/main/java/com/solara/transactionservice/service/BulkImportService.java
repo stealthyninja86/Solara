@@ -18,7 +18,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,6 +28,7 @@ import java.io.InputStreamReader;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.*;
@@ -56,29 +59,47 @@ public class BulkImportService {
     private final OutboxRepository outboxRepository;
     private final ImportJobRepository importJobRepository;
     private final MeterRegistry meterRegistry;
+    private final TransactionTemplate requiresNewTransactionTemplate;
 
     public BulkImportService(TransactionRepository transactionRepository,
                              OutboxRepository outboxRepository,
                              ImportJobRepository importJobRepository,
-                             MeterRegistry meterRegistry) {
+                             MeterRegistry meterRegistry,
+                             PlatformTransactionManager transactionManager) {
         this.transactionRepository = transactionRepository;
         this.outboxRepository = outboxRepository;
         this.importJobRepository = importJobRepository;
         this.meterRegistry = meterRegistry;
+        this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
+        this.requiresNewTransactionTemplate.setPropagationBehavior(
+                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Async
     @Transactional
     public void processJsonImport(UUID jobId, UUID userId, List<CreateTransactionRequest> requests) {
-        save(jobId, requests.stream()
-                .map(r -> new Transaction(userId, r.amount(), r.description(),
-                        r.merchant(), r.paymentMode(), r.type(), true))
-                .toList());
+        long start = System.currentTimeMillis();
+        log.info("Bulk JSON import processing started: jobId={}, userId={}, rowCount={}", jobId, userId, requests.size());
+        List<Transaction> transactions = requests.stream()
+                .map(r -> {
+                    Transaction transaction = new Transaction(userId, r.amount(),
+                            TransactionService.sanitizeNarration(r.description()),
+                            r.merchant(), r.paymentMode(), r.type(), true);
+                    if (r.transactionDate() != null) {
+                        transaction.setTimestamp(r.transactionDate().atStartOfDay(ZoneOffset.UTC).toInstant());
+                    }
+                    return transaction;
+                })
+                .toList();
+        save(jobId, transactions, 0);
+        log.info("Bulk JSON import completed: jobId={}, durationMs={}", jobId, System.currentTimeMillis() - start);
     }
 
     @Async
     @Transactional
     public void processCsvImport(UUID jobId, UUID userId, InputStream csvContent) throws IOException {
+        long start = System.currentTimeMillis();
+        log.info("Bulk CSV import processing started: jobId={}, userId={}", jobId, userId);
         List<CSVRecord> records = CSVFormat.DEFAULT.builder()
                 .setTrim(true)
                 .setIgnoreEmptyLines(true)
@@ -94,20 +115,47 @@ public class BulkImportService {
             }
         }
         if (headerIndex < 0) {
-            log.warn("No header row found in CSV for job={}; skipping import", jobId);
+            log.warn("No header row found in CSV for job={}; marking job failed", jobId);
+            failJob(jobId, 0, 0, "No header row found in the CSV file");
             return;
         }
+        log.info("CSV header row found at line {} for job={}: {}", headerIndex + 1, jobId, records.get(headerIndex));
 
         ColumnRole[] roles = classifyColumns(records.get(headerIndex),
                 records.subList(headerIndex + 1, records.size()));
-        List<Transaction> transactions = new ArrayList<>(records.size() - headerIndex - 1);
+        log.info("Classified CSV roles for job={}: {} (header columns={}, data rows={})",
+                jobId, Arrays.toString(roles), records.get(headerIndex).size(),
+                records.size() - headerIndex - 1);
+        int dataRowCount = records.size() - headerIndex - 1;
+        importJobRepository.findById(jobId).ifPresent(job -> {
+            job.setTotalRows(dataRowCount);
+            importJobRepository.save(job);
+        });
+        List<Transaction> transactions = new ArrayList<>(dataRowCount);
+        int failedRows = 0;
 
         for (int i = headerIndex + 1; i < records.size(); i++) {
             CSVRecord record = records.get(i);
-            String narration = valueAt(record, roles, ColumnRole.DESCRIPTION);
-            if (narration.isEmpty()) narration = valueAt(record, roles, ColumnRole.NARRATION);
+            if (record.size() == 1 && record.get(0).isBlank()) {
+                log.debug("Skipping blank CSV line {} for job={}", i + 1, jobId);
+                continue;
+            }
+            String narration = TransactionService.sanitizeNarration(valueAt(record, roles, ColumnRole.DESCRIPTION));
+            if (narration.isEmpty()) narration = TransactionService.sanitizeNarration(valueAt(record, roles, ColumnRole.NARRATION));
             String merchant = valueAt(record, roles, ColumnRole.MERCHANT);
-            if (narration.isEmpty() && merchant.isEmpty()) continue;
+            if (narration.isEmpty() && merchant.isEmpty()) {
+                failedRows++;
+                log.warn("Skipping CSV line {} for job={}: no DESCRIPTION/MERCHANT value found (values={}, roles={})",
+                        i + 1, jobId, record, Arrays.toString(roles));
+                continue;
+            }
+            LocalDate transactionDate = parseDate(valueAt(record, roles, ColumnRole.DATE));
+            if (hasRole(roles, ColumnRole.DATE) && transactionDate == null) {
+                failedRows++;
+                log.warn("Skipping CSV line {} for job={}: no valid date (values={}, roles={})",
+                        i + 1, jobId, record, Arrays.toString(roles));
+                continue;
+            }
 
             BigDecimal debit = parseDecimal(valueAt(record, roles, ColumnRole.DEBIT));
             BigDecimal credit = parseDecimal(valueAt(record, roles, ColumnRole.CREDIT));
@@ -115,18 +163,36 @@ public class BulkImportService {
 
             boolean hasDebitCreditColumn = hasRole(roles, ColumnRole.DEBIT) || hasRole(roles, ColumnRole.CREDIT);
             PaymentMode mode = detectPaymentMode(narration.isEmpty() ? merchant : narration);
+
+            Transaction transaction = null;
             if (debit != null && debit.signum() > 0) {
-                transactions.add(new Transaction(userId, debit, narration, merchant, mode, TransactionType.DEBIT, true));
+                transaction = new Transaction(userId, debit, narration, merchant, mode, TransactionType.DEBIT, true);
             } else if (credit != null && credit.signum() > 0) {
-                transactions.add(new Transaction(userId, credit, narration, merchant, mode, TransactionType.CREDIT, true));
+                transaction = new Transaction(userId, credit, narration, merchant, mode, TransactionType.CREDIT, true);
             } else if (amount != null) {
-                transactions.add(new Transaction(userId, amount.abs(), narration, merchant, mode,
+                transaction = new Transaction(userId, amount.abs(), narration, merchant, mode,
                         hasDebitCreditColumn
                                 ? (amount.signum() >= 0 ? TransactionType.CREDIT : TransactionType.DEBIT)
-                                : TransactionType.DEBIT, true));
+                                : TransactionType.DEBIT, true);
+            } else {
+                failedRows++;
+                log.warn("Skipping CSV line {} for job={}: no positive DEBIT/CREDIT/AMOUNT value found " +
+                        "(debit={}, credit={}, amount={})", i + 1, jobId, debit, credit, amount);
+            }
+            if (transaction != null) {
+                if (transactionDate != null) {
+                    transaction.setTimestamp(transactionDate.atStartOfDay(ZoneOffset.UTC).toInstant());
+                }
+                log.debug("Imported CSV line {} for job={}: type={}, amount={}, merchant='{}', mode={}, date={}",
+                        i + 1, jobId, transaction.getType(), transaction.getAmount(),
+                        transaction.getMerchant(), transaction.getPaymentMode(), transactionDate);
+                transactions.add(transaction);
             }
         }
-        save(jobId, transactions);
+        log.debug("Parsed {} CSV rows into transactions for job={} ({} failed)", transactions.size(), jobId, failedRows);
+        save(jobId, transactions, failedRows);
+        log.info("Bulk CSV import completed: jobId={}, rows={}, durationMs={}",
+                jobId, transactions.size(), System.currentTimeMillis() - start);
     }
 
     private boolean isHeaderRow(CSVRecord record) {
@@ -165,6 +231,16 @@ public class BulkImportService {
             roles[col] = valueBasedRole(sample, col);
         }
 
+        for (int col = 0; col < columns; col++) {
+            if (roles[col] != ColumnRole.UNKNOWN) continue;
+            String headerValue = header.get(col);
+            Optional<ColumnRole> dictionaryRole = CsvHeaderDictionary.lookup(headerValue);
+            if (dictionaryRole.isPresent()) {
+                log.debug("classifyColumns(col={}): header '{}' matched header dictionary as {}", col, headerValue, dictionaryRole.get());
+                roles[col] = dictionaryRole.get();
+            }
+        }
+
         return roles;
     }
 
@@ -176,24 +252,37 @@ public class BulkImportService {
             if (!v.isEmpty()) values.add(v);
             if (values.size() == 3) break;
         }
-        if (values.size() < 2) return ColumnRole.UNKNOWN;
-
-        if (values.stream().allMatch(BulkImportService::isDate)) return ColumnRole.DATE;
-        if (values.stream().allMatch(v -> v.matches("\\d{10,16}"))) return ColumnRole.REF_NO;
-
-        boolean anyText = values.stream().anyMatch(BulkImportService::isTextValue);
-        if (!anyText) {
-            if (values.stream().allMatch(v -> parseDecimal(v) != null)) return ColumnRole.AMOUNT;
+        if (values.size() < 2) {
+            log.debug("valueBasedRole(col={}): only {} non-empty value(s) in sample; returning UNKNOWN", col, values.size());
             return ColumnRole.UNKNOWN;
         }
+        log.debug("valueBasedRole(col={}): sample values={}", col, values);
 
-        if (values.stream().anyMatch(BulkImportService::isDescriptionLike)) return ColumnRole.DESCRIPTION;
-        if (values.stream().allMatch(BulkImportService::isMerchantLike)) return ColumnRole.MERCHANT;
-        return ColumnRole.NARRATION;
+        ColumnRole role;
+        if (values.stream().allMatch(BulkImportService::isDate)) {
+            role = ColumnRole.DATE;
+        } else if (values.stream().allMatch(v -> v.matches("\\d{10,16}"))) {
+            role = ColumnRole.REF_NO;
+        } else {
+            boolean anyText = values.stream().anyMatch(BulkImportService::isTextValue);
+            if (!anyText) {
+                role = values.stream().allMatch(v -> parseDecimal(v) != null)
+                        ? ColumnRole.AMOUNT
+                        : ColumnRole.UNKNOWN;
+            } else if (values.stream().anyMatch(BulkImportService::isDescriptionLike)) {
+                role = ColumnRole.DESCRIPTION;
+            } else if (values.stream().allMatch(BulkImportService::isMerchantLike)) {
+                role = ColumnRole.MERCHANT;
+            } else {
+                role = ColumnRole.NARRATION;
+            }
+        }
+        log.debug("valueBasedRole(col={}): classified as {}", col, role);
+        return role;
     }
 
     private static boolean isTextValue(String value) {
-        return value.matches(".*\\p{L}.*") && parseDecimal(value) == null;
+        return value.chars().anyMatch(Character::isLetter) && parseDecimal(value) == null;
     }
 
     private static boolean isDescriptionLike(String value) {
@@ -215,6 +304,15 @@ public class BulkImportService {
         return false;
     }
 
+    private static LocalDate parseDate(String value) {
+        if (value == null || value.isBlank()) return null;
+        for (DateTimeFormatter fmt : DATE_FORMATS) {
+            try { return LocalDate.parse(value.trim(), fmt); }
+            catch (DateTimeParseException ignored) {}
+        }
+        return null;
+    }
+
     private static String valueAt(CSVRecord record, ColumnRole[] roles, ColumnRole role) {
         for (int i = 0; i < roles.length; i++) {
             if (roles[i] == role && i < record.size()) return record.get(i);
@@ -229,7 +327,8 @@ public class BulkImportService {
         return false;
     }
 
-    private void save(UUID jobId, List<Transaction> transactions) {
+    private void save(UUID jobId, List<Transaction> transactions, int failedRows) {
+        long start = System.currentTimeMillis();
         try {
             ImportJob job = importJobRepository.findById(jobId)
                     .orElseThrow(() -> new IllegalArgumentException("Import job not found: " + jobId));
@@ -239,16 +338,52 @@ public class BulkImportService {
             outboxRepository.saveAll(transactions.stream().map(OutboxEntity::forTransaction).toList());
             job.setStatus(ImportJobStatus.COMPLETED);
             job.setImportedRows(transactions.size());
+            job.setFailedRows(failedRows);
             job.setCompletedAt(Instant.now());
+            LocalDate minDate = transactions.stream()
+                    .map(t -> t.getTimestamp() != null
+                            ? t.getTimestamp().atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                            : null)
+                    .filter(java.util.Objects::nonNull)
+                    .min(LocalDate::compareTo)
+                    .orElse(null);
+            LocalDate maxDate = transactions.stream()
+                    .map(t -> t.getTimestamp() != null
+                            ? t.getTimestamp().atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                            : null)
+                    .filter(java.util.Objects::nonNull)
+                    .max(LocalDate::compareTo)
+                    .orElse(null);
+            job.setMinDate(minDate);
+            job.setMaxDate(maxDate);
             importJobRepository.save(job);
-            outboxRepository.save(OutboxEntity.forBulkImportCompletion(job, transactions.size(), 0));
+            outboxRepository.save(OutboxEntity.forBulkImportCompletion(job, transactions.size(), failedRows));
 
             meterRegistry.counter("solara.import.jobs", "outcome", "completed").increment();
             meterRegistry.counter("solara.import.rows", "outcome", "imported").increment(transactions.size());
+            log.info("Bulk import save completed: jobId={}, status={}, rows={}, failedRows={}, outboxEntriesQueued={}, durationMs={}",
+                    jobId, ImportJobStatus.COMPLETED, transactions.size(), failedRows, transactions.size(),
+                    System.currentTimeMillis() - start);
         } catch (Exception e) {
             meterRegistry.counter("solara.import.jobs", "outcome", "failed").increment();
+            log.error("Bulk import save failed: jobId={}, attemptedRows={}, failedRows={}, error={}",
+                    jobId, transactions.size(), failedRows, e.getMessage(), e);
+            failJob(jobId, transactions.size(), failedRows, e.getMessage());
             throw e;
         }
+    }
+
+    private void failJob(UUID jobId, int attemptedRows, int failedRows, String message) {
+        requiresNewTransactionTemplate.executeWithoutResult(status ->
+                importJobRepository.findById(jobId).ifPresent(job -> {
+                    job.setStatus(ImportJobStatus.FAILED);
+                    job.setTotalRows(Math.max(job.getTotalRows(), attemptedRows));
+                    job.setFailedRows(failedRows);
+                    job.setErrorReport(message != null && message.length() > 2000
+                            ? message.substring(0, 2000) : message);
+                    job.setCompletedAt(Instant.now());
+                    importJobRepository.save(job);
+                }));
     }
 
     private static BigDecimal parseDecimal(String raw) {

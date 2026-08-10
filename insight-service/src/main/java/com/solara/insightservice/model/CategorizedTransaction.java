@@ -33,6 +33,9 @@ public class CategorizedTransaction {
     @Column(name = "original_description", length = 500)
     private String originalDescription;
 
+    @Column(length = 500)
+    private String description;
+
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal amount;
 
@@ -114,6 +117,9 @@ public class CategorizedTransaction {
 
     public String getOriginalDescription() { return originalDescription; }
     public void setOriginalDescription(String originalDescription) { this.originalDescription = originalDescription; }
+
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
 
     public BigDecimal getAmount() { return amount; }
     public void setAmount(BigDecimal amount) { this.amount = amount; }

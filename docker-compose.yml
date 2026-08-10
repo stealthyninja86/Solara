@@ -1,4 +1,28 @@
 services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: solara/frontend:latest
+    container_name: frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./certs:/etc/nginx/certs:ro
+      - ./certbot-webroot:/var/www/certbot:ro
+    depends_on:
+      api-gateway:
+        condition: service_started
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || wget -q -O /dev/null --no-check-certificate https://127.0.0.1/ || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - internal
+
   api-gateway:
     build:
       context: ./api-gateway
@@ -54,10 +78,9 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://auth-service-db:5432/db
       SPRING_DATASOURCE_USERNAME: admin_user
       SPRING_DATASOURCE_PASSWORD: password
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      SPRING_SQL_INIT_MODE: always
       COOKIE_SECURE: "false"
       COOKIE_PATH: "/api/v1/auth"
+      APP_INTERNAL_API_KEY: "solara-internal-demo-secret"
       SPRING_PROFILES_ACTIVE: dev
     depends_on:
       auth-service-db:
@@ -159,8 +182,10 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
-      SPRING_AI_OLLAMA_BASE_URL: http://ollama:11434
+      SPRING_AI_OLLAMA_BASE_URL: http://host.docker.internal:11434
       APP_CATEGORIZATION_SKIP_AI: "false"
+      APP_SETTINGS_BASE_URL: http://auth-service:4001
+      APP_SETTINGS_API_KEY: "solara-internal-demo-secret"
     depends_on:
       insight-service-db:
         condition: service_healthy
@@ -222,7 +247,6 @@ services:
   prometheus:
     image: prom/prometheus:v3.3.1
     container_name: prometheus
-    profiles: [ "observability" ]
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=15d
@@ -237,7 +261,6 @@ services:
   grafana:
     image: grafana/grafana:11.5.2
     container_name: grafana
-    profiles: [ "observability" ]
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
@@ -257,7 +280,6 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.157.0
     container_name: otel-collector
-    profiles: [ "observability" ]
     command: [ "--config=/etc/otelcol/config.yaml" ]
     volumes:
       - ./infrastructure/observability/otel/collector.yml:/etc/otelcol/config.yaml:ro
@@ -270,7 +292,6 @@ services:
   tempo:
     image: grafana/tempo:2.7.1
     container_name: tempo
-    profiles: [ "observability" ]
     command: [ "-config.file=/etc/tempo.yml" ]
     volumes:
       - ./infrastructure/observability/tempo/tempo.yml:/etc/tempo.yml:ro
@@ -285,7 +306,6 @@ services:
   loki:
     image: grafana/loki:3.6.0
     container_name: loki
-    profiles: [ "observability" ]
     command: [ "-config.file=/etc/loki/loki.yml" ]
     volumes:
       - ./infrastructure/observability/loki/loki.yml:/etc/loki/loki.yml:ro
@@ -298,12 +318,12 @@ services:
   promtail:
     image: grafana/promtail:3.6.0
     container_name: promtail
-    profiles: [ "observability" ]
     command: [ "-config.file=/etc/promtail/promtail.yml" ]
     volumes:
       - ./infrastructure/observability/promtail/promtail.yml:/etc/promtail/promtail.yml:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail-positions:/var/lib/promtail
     networks:
       - internal
     depends_on:
@@ -320,3 +340,4 @@ volumes:
   ollama-data:
   tempo-data:
   loki-data:
+  promtail-positions:

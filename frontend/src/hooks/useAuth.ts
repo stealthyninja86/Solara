@@ -1,17 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../utils/api";
 
+export type IconMode = "emoji" | "icons";
+
+type Profile = {
+  firstName: string | null;
+  lastName: string | null;
+  iconMode: string | null;
+  llmEnabled: boolean | null;
+};
+
 let _token: string | null = null;
 let _email: string | null = null;
 let _userId: string | null = null;
-let _firstName: string | null = null;
-let _lastName: string | null = null;
+let _profile: Profile = { firstName: null, lastName: null, iconMode: null, llmEnabled: null };
 
 export function getToken() { return _token; }
 export function getEmail() { return _email; }
 export function getUserId() { return _userId; }
-export function getFirstName() { return _firstName; }
-export function getLastName() { return _lastName; }
+export function getFirstName() { return _profile.firstName; }
+export function getLastName() { return _profile.lastName; }
+export function getIconMode(): IconMode | null { return _profile.iconMode === "emoji" || _profile.iconMode === "icons" ? _profile.iconMode : null; }
 
 function parseJwtSub(token: string): string | null {
   try {
@@ -23,31 +32,31 @@ function parseJwtSub(token: string): string | null {
   }
 }
 
-function setAuth(token: string, email: string) {
+export function setAuth(token: string, email: string) {
   _token = token;
   _email = email;
   _userId = parseJwtSub(token);
 }
 
-function setProfile(firstName: string | null, lastName: string | null) {
-  _firstName = firstName;
-  _lastName = lastName;
+function applyProfile(profile: Profile) {
+  _profile = profile;
 }
 
 function clearAuth() {
   _token = null;
   _email = null;
   _userId = null;
-  _firstName = null;
-  _lastName = null;
+  _profile = { firstName: null, lastName: null, iconMode: null, llmEnabled: null };
 }
 
 export function useAuth() {
   const [token, setToken] = useState<string | null>(_token);
   const [email, setEmail] = useState<string | null>(_email);
   const [userId, setUserId] = useState<string | null>(_userId);
-  const [firstName, setFirstName] = useState<string | null>(_firstName);
-  const [lastName, setLastName] = useState<string | null>(_lastName);
+  const [firstName, setFirstName] = useState<string | null>(_profile.firstName);
+  const [lastName, setLastName] = useState<string | null>(_profile.lastName);
+  const [iconMode, setIconModeState] = useState<IconMode | null>(getIconMode());
+  const [llmEnabled, setLlmEnabled] = useState<boolean | null>(_profile.llmEnabled);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -69,9 +78,11 @@ export function useAuth() {
       })
       .then((profile) => {
         if (profile?.firstName !== undefined) {
-          setProfile(profile.firstName, profile.lastName);
-          setFirstName(_firstName);
-          setLastName(_lastName);
+          applyProfile(profile);
+          setFirstName(_profile.firstName);
+          setLastName(_profile.lastName);
+          setIconModeState(getIconMode());
+          setLlmEnabled(_profile.llmEnabled);
         }
       })
       .catch(() => {})
@@ -94,9 +105,11 @@ export function useAuth() {
     const profileRes = await api("/api/v1/auth/profile");
     if (profileRes.ok) {
       const profile = await profileRes.json();
-      setProfile(profile.firstName, profile.lastName);
-      setFirstName(_firstName);
-      setLastName(_lastName);
+      applyProfile(profile);
+      setFirstName(_profile.firstName);
+      setLastName(_profile.lastName);
+      setIconModeState(getIconMode());
+      setLlmEnabled(_profile.llmEnabled);
     }
   }, []);
 
@@ -114,9 +127,11 @@ export function useAuth() {
       setToken(_token);
       setEmail(_email);
       setUserId(_userId);
-      setProfile(firstNameVal, lastNameVal);
-      setFirstName(_firstName);
-      setLastName(_lastName);
+      applyProfile({ firstName: firstNameVal, lastName: lastNameVal, iconMode: null, llmEnabled: null });
+      setFirstName(_profile.firstName);
+      setLastName(_profile.lastName);
+      setIconModeState(getIconMode());
+      setLlmEnabled(_profile.llmEnabled);
     },
     []
   );
@@ -133,6 +148,8 @@ export function useAuth() {
     setUserId(null);
     setFirstName(null);
     setLastName(null);
+    setIconModeState(null);
+    setLlmEnabled(null);
   }, []);
 
   const updateProfile = useCallback(async (firstNameVal: string | null, lastNameVal: string | null) => {
@@ -142,13 +159,44 @@ export function useAuth() {
       body: JSON.stringify({ firstName: firstNameVal, lastName: lastNameVal }),
     });
     if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || "Failed to update profile");
+      let message = "Failed to update profile";
+      try {
+        const data = await res.json();
+        message = data.error || message;
+      } catch {
+        // Response body is empty or not JSON
+      }
+      throw new Error(message);
     }
     const profile = await res.json();
-    setProfile(profile.firstName, profile.lastName);
-    setFirstName(_firstName);
-    setLastName(_lastName);
+    applyProfile(profile);
+    setFirstName(_profile.firstName);
+    setLastName(_profile.lastName);
+    setIconModeState(getIconMode());
+    setLlmEnabled(_profile.llmEnabled);
+    return profile;
+  }, []);
+
+  const updateSettings = useCallback(async (next: { iconMode?: IconMode; llmEnabled?: boolean }) => {
+    const res = await api("/api/v1/auth/profile/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next),
+    });
+    if (!res.ok) {
+      let message = "Failed to update settings";
+      try {
+        const data = await res.json();
+        message = data.error || message;
+      } catch {
+        // Response body is empty or not JSON — keep default message
+      }
+      throw new Error(message);
+    }
+    const profile = await res.json();
+    applyProfile(profile);
+    setIconModeState(getIconMode());
+    setLlmEnabled(_profile.llmEnabled);
     return profile;
   }, []);
 
@@ -159,8 +207,14 @@ export function useAuth() {
       body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
     });
     if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || "Failed to change password");
+      let message = "Failed to change password";
+      try {
+        const data = await res.json();
+        message = data.error || message;
+      } catch {
+        // Response body is empty or not JSON
+      }
+      throw new Error(message);
     }
   }, []);
 
@@ -170,12 +224,15 @@ export function useAuth() {
     userId,
     firstName,
     lastName,
+    iconMode,
+    llmEnabled,
     isAuthenticated: !!token,
     isLoading,
     login,
     register,
     logout,
     updateProfile,
+    updateSettings,
     changePassword,
   };
 }

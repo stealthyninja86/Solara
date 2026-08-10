@@ -3,7 +3,7 @@ server:
   grpc_listen_port: 0
 
 positions:
-  filename: /tmp/positions.yaml
+  filename: /var/lib/promtail/positions.yaml
 
 clients:
   - url: http://loki:3100/loki/api/v1/push
@@ -22,5 +22,9 @@ scrape_configs:
       - json:
           expressions:
             level: level
-            logger: loggerName
-            trace_id: mdc.traceId
+            logger: logger_name
+            trace_id: traceId
+      - labels:
+          level:
+          logger:
+          trace_id:

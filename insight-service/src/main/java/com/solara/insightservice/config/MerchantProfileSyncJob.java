@@ -2,6 +2,7 @@ package com.solara.insightservice.config;
 
 import com.solara.insightservice.model.TransactionCategory;
 import com.solara.insightservice.repository.MerchantProfileRepository;
+import com.solara.insightservice.util.VectorLiterals;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -15,13 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Periodic reconciliation of the merchant profile store (merchant_profiles) against its source of truth
- * (categorized_transactions). The EmbeddingWorker keeps the store fresh in real time via
- * transaction.categorized.v1 events; this job repairs whatever the at-most-once event path can lose —
- * a deleted transaction, a merchant that never re-published, a worker outage. It also keeps the HNSW
- * index alive on every startup (schema.sql runs before the table exists, so the index cannot live there).
- */
 @Component
 @ConditionalOnProperty(name = "app.merchant-profile.sync-enabled", havingValue = "true", matchIfMissing = true)
 public class MerchantProfileSyncJob {
@@ -61,11 +55,6 @@ public class MerchantProfileSyncJob {
         }
     }
 
-    /**
-     * Eligibility rule: only proven labels enter the store — agent labels that passed the 0.70
-     * validator, or manual labels (confidence IS NULL, set by recategorize/update). Unreviewed and
-     * low-confidence rows are excluded. The latest transaction per (user_id, normalized_merchant) wins.
-     */
     private void rebuildProfilesFromSourceOfTruth() {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
             SELECT DISTINCT ON (user_id, normalized_merchant)
@@ -106,7 +95,7 @@ public class MerchantProfileSyncJob {
                 float[] embedding = embeddingModel.embed(embedText);
                 merchantProfileRepository.upsert(
                         userId, merchant, normalizedMerchant,
-                        description, category.name(), toVectorLiteral(embedding));
+                        description, category.name(), VectorLiterals.toPostgresLiteral(embedding));
                 upserted++;
             } catch (Exception e) {
                 skipped++;
@@ -131,14 +120,5 @@ public class MerchantProfileSyncJob {
         if (deleted > 0) {
             log.info("Profile store sync: deleted {} orphan profiles", deleted);
         }
-    }
-
-    private String toVectorLiteral(float[] values) {
-        StringBuilder builder = new StringBuilder("[");
-        for (int i = 0; i < values.length; i++) {
-            if (i > 0) builder.append(",");
-            builder.append(values[i]);
-        }
-        return builder.append("]").toString();
     }
 }
