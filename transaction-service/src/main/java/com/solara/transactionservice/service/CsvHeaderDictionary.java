@@ -10,12 +10,6 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-/**
- * Fallback column classifier: maps bank-statement header names to column roles.
- * Runs only after value-based heuristics fail (valueBasedRole returned UNKNOWN).
- * Header variants collected from Indian bank statement formats (SBI, HDFC, ICICI,
- * Axis) and Tally exports.
- */
 public final class CsvHeaderDictionary {
 
     private static final Map<ColumnRole, Pattern> PATTERNS = buildPatterns();

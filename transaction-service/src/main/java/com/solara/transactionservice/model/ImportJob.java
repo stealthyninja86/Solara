@@ -3,6 +3,7 @@ package com.solara.transactionservice.model;
 import jakarta.persistence.*;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -41,6 +42,12 @@ public class ImportJob {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    @Column(name = "min_date")
+    private LocalDate minDate;
+
+    @Column(name = "max_date")
+    private LocalDate maxDate;
+
     public ImportJob() {}
 
     public ImportJob(UUID userId, int totalRows) {
@@ -76,4 +83,8 @@ public class ImportJob {
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getCompletedAt() { return completedAt; }
     public void setCompletedAt(Instant completedAt) { this.completedAt = completedAt; }
+    public LocalDate getMinDate() { return minDate; }
+    public void setMinDate(LocalDate minDate) { this.minDate = minDate; }
+    public LocalDate getMaxDate() { return maxDate; }
+    public void setMaxDate(LocalDate maxDate) { this.maxDate = maxDate; }
 }

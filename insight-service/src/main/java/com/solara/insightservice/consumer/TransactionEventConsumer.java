@@ -10,8 +10,8 @@ import com.solara.insightservice.dto.event.TransactionEvent;
 import com.solara.insightservice.dto.event.TransactionEventPayload;
 import com.solara.insightservice.repository.CategorizedTransactionRepository;
 import com.solara.insightservice.repository.ProcessedEventRepository;
-import com.solara.insightservice.service.CategorizationService;
-import com.solara.insightservice.service.SubscriptionService;
+import com.solara.insightservice.service.categorization.CategorizationService;
+import com.solara.insightservice.service.finance.SubscriptionService;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -94,14 +94,6 @@ public class TransactionEventConsumer {
         }
     }
 
-    /**
-     * Claims the event idempotently. The claim is its own short transaction —
-     * the LLM categorization below must never hold a DB transaction open
-     * (previously the whole handler ran inside one {@code @Transactional},
-     * pinning a connection for 10-30s per LLM call).
-     *
-     * @return true if this attempt made the claim; false if a claim already exists
-     */
     private boolean claim(TransactionEvent event) {
         try {
             processedEventRepository.save(new ProcessedEvent(event.eventId(), event.eventType()));
@@ -111,13 +103,6 @@ public class TransactionEventConsumer {
         }
     }
 
-    /**
-     * Reconciles a duplicate claim: the claim row alone is not proof the work
-     * completed — a crash between claim and save leaves a stale row that would
-     * otherwise skip a never-processed event forever. The artifact of a completed
-     * create/update is the categorized transaction itself; for a delete it is
-     * the transaction's absence.
-     */
     private boolean workAlreadyDone(TransactionEvent event) {
         UUID transactionId = event.payload().transactionId();
         boolean transactionExists = categorizedTransactionRepository.existsById(transactionId);
@@ -128,10 +113,6 @@ public class TransactionEventConsumer {
         };
     }
 
-    /**
-     * Clears a stale claim left by a failed attempt (claim committed, work never
-     * finished) and re-claims, so the Kafka retry chain can re-run the handler.
-     */
     private void reclaim(TransactionEvent event) {
         log.warn("Stale claim detected, re-processing: eventId={}, eventType={}",
                 event.eventId(), event.eventType());

@@ -10,7 +10,7 @@ import com.solara.insightservice.model.TransactionCategory;
 import com.solara.insightservice.repository.MerchantKnowledgeBaseRepository;
 import com.solara.insightservice.repository.MerchantProfileRepository;
 import com.solara.insightservice.repository.ProcessedEventRepository;
-import com.solara.insightservice.service.MerchantResolver;
+import com.solara.insightservice.service.categorization.MerchantResolver;
 import com.solara.insightservice.util.VectorLiterals;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
@@ -24,6 +24,7 @@ import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.Set;
 
 @Component
 public class EmbeddingWorker {
@@ -92,13 +93,6 @@ public class EmbeddingWorker {
         }
     }
 
-    /**
-     * Claims the event idempotently in its own short transaction — the embedding
-     * call below must never hold a DB transaction open (previously the whole
-     * handler ran inside one {@code @Transactional}).
-     *
-     * @return true if this attempt made the claim; false if a claim already exists
-     */
     private boolean claim(TransactionCategorizedEvent event) {
         try {
             processedEventRepository.save(new ProcessedEvent(
@@ -109,12 +103,6 @@ public class EmbeddingWorker {
         }
     }
 
-    /**
-     * Reconciles a duplicate claim: the claim row alone is not proof the work
-     * completed — a crash between claim and upsert leaves a stale row that would
-     * otherwise skip a never-processed event forever. The artifact of a completed
-     * run is the merchant profile for the event's merchant.
-     */
     private boolean workAlreadyDone(TransactionCategorizedEvent event) {
         TransactionCategorizedEventPayload payload = event.payload();
         String normalizedMerchant = payload.normalizedMerchant() != null
@@ -124,10 +112,6 @@ public class EmbeddingWorker {
                 .isPresent();
     }
 
-    /**
-     * Clears a stale claim left by a failed attempt (claim committed, work never
-     * finished) and re-claims, so the Kafka retry chain can re-run the handler.
-     */
     private void reclaim(TransactionCategorizedEvent event) {
         log.warn("Stale claim detected, re-processing: eventId={}, eventType={}",
                 event.eventId(), event.eventType());
@@ -170,9 +154,19 @@ public class EmbeddingWorker {
     private static final BigDecimal LEARN_THRESHOLD = new BigDecimal("0.85");
     private static final BigDecimal MANUAL_CORRECTION_CONFIDENCE = new BigDecimal("0.90");
 
+    // Generic personal-finance terms are not merchants — learning them into the
+    // global KB mislabels every transaction from such a payee (e.g. a landlord
+    // named "rent" poisoned the KB with OTHER). The LLM prompt already forbids
+    // inventing business names; this guard applies the same standard to the learner.
+    private static final Set<String> GENERIC_ALIASES = Set.of(
+            "rent", "mortgage", "salary", "wages", "transfer", "withdrawal", "deposit",
+            "interest", "fee", "fees", "charge", "charges", "cash", "atm", "refund",
+            "bill", "bills", "payment", "payments", "emi", "loan", "insurance",
+            "tax", "taxes", "recharge", "wallet", "topup", "upi", "draft");
+
     private boolean canLearn(TransactionCategorizedEventPayload payload) {
         String alias = merchantResolver.normalize(payload.merchant());
-        if (alias.isBlank()) {
+        if (alias.isBlank() || GENERIC_ALIASES.contains(alias)) {
             return false;
         }
         BigDecimal confidence = payload.confidence();
@@ -184,7 +178,7 @@ public class EmbeddingWorker {
 
     private void learnAlias(TransactionCategorizedEventPayload payload) {
         String alias = merchantResolver.normalize(payload.merchant());
-        if (alias.isBlank()) {
+        if (alias.isBlank() || GENERIC_ALIASES.contains(alias)) {
             return;
         }
         BigDecimal confidence = payload.confidence();

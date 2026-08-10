@@ -26,6 +26,12 @@ public class User {
     @Column(nullable = false, length = 60)
     private String password;
 
+    @Column(nullable = false, length = 10)
+    private String iconMode = "icons";
+
+    @Column(nullable = false)
+    private Boolean llmEnabled = true;
+
     public UUID getId() {
         return id;
     }
@@ -64,5 +70,21 @@ public class User {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public String getIconMode() {
+        return iconMode;
+    }
+
+    public void setIconMode(String iconMode) {
+        this.iconMode = iconMode;
+    }
+
+    public Boolean getLlmEnabled() {
+        return llmEnabled;
+    }
+
+    public void setLlmEnabled(Boolean llmEnabled) {
+        this.llmEnabled = llmEnabled;
     }
 }

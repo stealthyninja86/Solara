@@ -16,12 +16,6 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * Exposes the dead-letter-topic backlog as a gauge. The DLQ has no consumer
- * group, so depth is end offset - beginning offset. A growing DLQ is an
- * application-level failure signal (poison messages or a broken retry chain),
- * so it must be a first-class metric, not a log line.
- */
 @Component
 public class DlqDepthMetrics {
 

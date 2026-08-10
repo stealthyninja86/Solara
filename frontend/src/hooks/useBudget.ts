@@ -40,10 +40,16 @@ export function useBudget(refreshKey: number = 0, month?: number, year?: number)
 
   async function setMonthlyBudget(budget: number): Promise<boolean> {
     try {
-      const response = await api(
-        `/api/v1/insights/budget?userId=${getUserId() ?? DEFAULT_USER_ID}`,
-        {
-          method: "PUT",
+      const now = new Date();
+      const m = month ?? now.getMonth();
+      const y = year ?? now.getFullYear();
+      const at = toIsoDate(y, m);
+      const params = new URLSearchParams({
+        userId: getUserId() ?? DEFAULT_USER_ID,
+        at,
+      });
+      const response = await api(`/api/v1/insights/budget?${params}`, {
+        method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ budget }),
         }

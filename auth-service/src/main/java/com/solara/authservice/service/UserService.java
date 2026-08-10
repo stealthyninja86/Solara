@@ -51,6 +51,18 @@ public class UserService {
         return userRepository.save(user);
     }
 
+    public User updateSettings(UUID id, String iconMode, Boolean llmEnabled) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new com.solara.authservice.exception.UserNotFoundException("User not found: " + id));
+        if (iconMode != null) {
+            user.setIconMode(iconMode);
+        }
+        if (llmEnabled != null) {
+            user.setLlmEnabled(llmEnabled);
+        }
+        return userRepository.save(user);
+    }
+
     public void changePassword(UUID id, String currentPassword, String newPassword) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new com.solara.authservice.exception.UserNotFoundException("User not found: " + id));

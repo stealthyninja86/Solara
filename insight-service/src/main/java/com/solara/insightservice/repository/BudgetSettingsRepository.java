@@ -17,6 +17,10 @@ public interface BudgetSettingsRepository extends JpaRepository<BudgetSetting, U
 
     Optional<BudgetSetting> findByUserIdAndMonthStart(UUID userId, LocalDate monthStart);
 
+    Optional<BudgetSetting> findTopByUserIdAndMonthlyIncomeIsNotNullOrderByMonthStartDesc(UUID userId);
+
+    Optional<BudgetSetting> findTopByUserIdAndMonthlyBudgetIsNotNullOrderByMonthStartDesc(UUID userId);
+
     @Modifying
     @Query(value = """
         INSERT INTO budget_settings (id, user_id, month_start, monthly_income, created_at, updated_at)

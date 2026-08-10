@@ -7,9 +7,9 @@ import com.solara.insightservice.dto.response.BudgetResponse;
 import com.solara.insightservice.dto.response.IncomeResponse;
 import com.solara.insightservice.dto.response.SubscriptionResponse;
 import com.solara.insightservice.dto.response.TrackedSubscriptionResponse;
-import com.solara.insightservice.service.InsightQueryService;
-import com.solara.insightservice.service.ReportService;
-import com.solara.insightservice.service.SubscriptionService;
+import com.solara.insightservice.service.finance.FinanceQueryService;
+import com.solara.insightservice.service.finance.SubscriptionSuggester;
+import com.solara.insightservice.service.finance.SubscriptionService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,33 +31,27 @@ import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * User-configurable surfaces: budget, income, and tracked subscriptions.
- * Split out of the former {@code InsightController}; read-only analytics live
- * in {@link AnalyticsController}. All request bodies are validated records —
- * a malformed body is a 400, never a silent default.
- */
 @RestController
 @RequestMapping("/api/v1/insights")
 public class FinanceController {
 
-    private final InsightQueryService queryService;
-    private final ReportService reportService;
+    private final FinanceQueryService queryService;
+    private final SubscriptionSuggester subscriptionSuggester;
     private final SubscriptionService subscriptionService;
 
     private static final Logger log = LoggerFactory.getLogger(FinanceController.class);
 
-    public FinanceController(InsightQueryService queryService, ReportService reportService,
+    public FinanceController(FinanceQueryService queryService, SubscriptionSuggester subscriptionSuggester,
                               SubscriptionService subscriptionService) {
         this.queryService = queryService;
-        this.reportService = reportService;
+        this.subscriptionSuggester = subscriptionSuggester;
         this.subscriptionService = subscriptionService;
     }
 
     @GetMapping("/subscriptions")
     public ResponseEntity<List<SubscriptionResponse>> subscriptions(@RequestParam UUID userId) {
         log.debug("subscriptions requested: userId={}", userId);
-        List<SubscriptionResponse> subscriptions = reportService.buildSubscriptions(userId);
+        List<SubscriptionResponse> subscriptions = subscriptionSuggester.suggest(userId);
         log.debug("subscriptions returned: userId={}, count={}", userId, subscriptions.size());
         return ResponseEntity.ok(subscriptions);
     }
@@ -124,19 +118,24 @@ public class FinanceController {
     }
 
     @GetMapping("/income")
-    public ResponseEntity<IncomeResponse> getIncome(@RequestParam UUID userId) {
-        log.debug("income get requested: userId={}", userId);
-        BigDecimal monthlyIncome = queryService.getMonthlyIncome(userId).orElse(BigDecimal.ZERO);
+    public ResponseEntity<IncomeResponse> getIncome(
+            @RequestParam UUID userId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate at) {
+        log.debug("income get requested: userId={}, at={}", userId, at);
+        LocalDate monthStart = at != null ? at.withDayOfMonth(1) : YearMonth.now().atDay(1);
+        BigDecimal monthlyIncome = queryService.getMonthlyIncome(userId, monthStart).orElse(BigDecimal.ZERO);
         return ResponseEntity.ok(new IncomeResponse(userId, monthlyIncome));
     }
 
     @PutMapping("/income")
     public ResponseEntity<IncomeResponse> setIncome(
             @RequestParam UUID userId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate at,
             @Valid @RequestBody IncomeUpdateRequest request) {
         BigDecimal income = request.income();
-        log.info("income set requested: userId={}, income={}", userId, income);
-        queryService.setMonthlyIncome(userId, income);
+        LocalDate monthStart = at != null ? at.withDayOfMonth(1) : YearMonth.now().atDay(1);
+        log.info("income set requested: userId={}, income={}, monthStart={}", userId, income, monthStart);
+        queryService.setMonthlyIncome(userId, income, monthStart);
         return ResponseEntity.ok(new IncomeResponse(userId, income));
     }
 }

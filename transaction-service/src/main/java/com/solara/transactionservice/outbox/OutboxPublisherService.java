@@ -23,12 +23,6 @@ public class OutboxPublisherService {
         this.sendTimeoutMillis = sendTimeoutMillis;
     }
 
-    /**
-     * Sends the outbox payload to Kafka and blocks until the broker acknowledges the record.
-     * Throws if the send is not acknowledged within the timeout, so callers leave the row
-     * unpublished and retry it on the next poll. The idempotent consumer dedupes any
-     * re-published duplicate.
-     */
     public void publish(OutboxEntity outbox) {
         long start = System.currentTimeMillis();
         log.info("Outbox publish start: aggregateId={}, eventType={}",

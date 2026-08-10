@@ -54,9 +54,9 @@ CREATE TABLE merchant_profiles (
     updated_at TIMESTAMPTZ NOT NULL,
     CONSTRAINT uk_merchant_profiles_user_merchant UNIQUE (user_id, normalized_merchant),
     CONSTRAINT merchant_profiles_category_check CHECK (
-        category IN ('FOOD_DINING', 'TRANSPORT', 'SHOPPING', 'ENTERTAINMENT', 'BILLS_UTILITIES',
-                     'HEALTHCARE', 'GROCERIES', 'RENT', 'SALARY', 'INVESTMENT', 'EDUCATION',
-                     'TRAVEL', 'OTHER', 'BUDGET')
+        category IN ('FOOD_DINING', 'TRANSPORT', 'FUEL', 'SHOPPING', 'CLOTHING', 'ELECTRONICS',
+                     'ENTERTAINMENT', 'BILLS_UTILITIES', 'HEALTHCARE', 'GROCERIES', 'PET', 'RENT',
+                     'LOAN_EMI', 'SALARY', 'INVESTMENT', 'EDUCATION', 'TRAVEL', 'OTHER', 'BUDGET')
     )
 );
 

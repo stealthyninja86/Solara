@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.math.BigDecimal;
@@ -52,9 +53,11 @@ public interface CategorizedTransactionRepository extends JpaRepository<Categori
 
     @Query("SELECT COALESCE(SUM(t.amount), 0) FROM CategorizedTransaction t " +
             "WHERE t.userId = :userId AND t.type = :type " +
+            "AND (t.category IS NULL OR t.category NOT IN :excludedCategories) " +
             "AND t.createdAt >= :from AND t.createdAt < :to")
     BigDecimal sumAmountByUserAndTypeAndPeriod(@Param("userId") UUID userId,
                                                @Param("type") String type,
+                                               @Param("excludedCategories") Collection<TransactionCategory> excludedCategories,
                                                @Param("from") Instant from,
                                                @Param("to") Instant to);
 
@@ -72,13 +75,13 @@ public interface CategorizedTransactionRepository extends JpaRepository<Categori
         FROM CategorizedTransaction t
         WHERE t.userId = :userId
           AND t.type = :type
-          AND (t.category IS NULL OR t.category <> :excludedCategory)
+          AND (t.category IS NULL OR t.category NOT IN :excludedCategories)
           AND t.createdAt >= :from AND t.createdAt < :to
         GROUP BY t.category
         """)
     List<Object[]> sumByCategoryAndTypeBetween(@Param("userId") UUID userId,
                                                @Param("type") String type,
-                                               @Param("excludedCategory") TransactionCategory excludedCategory,
+                                               @Param("excludedCategories") Collection<TransactionCategory> excludedCategories,
                                                @Param("from") Instant from,
                                                @Param("to") Instant to);
 

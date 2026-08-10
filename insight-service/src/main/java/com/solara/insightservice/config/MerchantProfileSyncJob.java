@@ -16,13 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Periodic reconciliation of the merchant profile store (merchant_profiles) against its source of truth
- * (categorized_transactions). The EmbeddingWorker keeps the store fresh in real time via
- * transaction.categorized.v1 events; this job repairs whatever the at-most-once event path can lose —
- * a deleted transaction, a merchant that never re-published, a worker outage. It also keeps the HNSW
- * index alive on every startup (schema.sql runs before the table exists, so the index cannot live there).
- */
 @Component
 @ConditionalOnProperty(name = "app.merchant-profile.sync-enabled", havingValue = "true", matchIfMissing = true)
 public class MerchantProfileSyncJob {
@@ -62,11 +55,6 @@ public class MerchantProfileSyncJob {
         }
     }
 
-    /**
-     * Eligibility rule: only proven labels enter the store — agent labels that passed the 0.70
-     * validator, or manual labels (confidence IS NULL, set by recategorize/update). Unreviewed and
-     * low-confidence rows are excluded. The latest transaction per (user_id, normalized_merchant) wins.
-     */
     private void rebuildProfilesFromSourceOfTruth() {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
             SELECT DISTINCT ON (user_id, normalized_merchant)

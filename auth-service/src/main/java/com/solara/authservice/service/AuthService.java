@@ -3,6 +3,7 @@ package com.solara.authservice.service;
 import com.solara.authservice.dto.request.LoginRequest;
 import com.solara.authservice.dto.request.RegisterRequest;
 import com.solara.authservice.dto.response.UserProfileResponse;
+import com.solara.authservice.dto.response.UserSettingsResponse;
 import com.solara.authservice.entity.User;
 import com.solara.authservice.exception.InvalidCredentialsException;
 import com.solara.authservice.exception.UserNotFoundException;
@@ -29,7 +30,7 @@ public class AuthService {
     public UserProfileResponse registerUser(RegisterRequest registerRequest) {
         User user = userService.createUser(registerRequest);
         logger.info("User registered: {}", user.getEmail());
-        return new UserProfileResponse(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName());
+        return toProfile(user);
     }
 
     public UserProfileResponse loginUser(LoginRequest loginRequest) {
@@ -41,25 +42,42 @@ public class AuthService {
         }
 
         logger.info("User logged in: {}", user.getEmail());
-        return new UserProfileResponse(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName());
+        return toProfile(user);
     }
 
     public UserProfileResponse getUserByEmail(String email) {
         User user = userService.findByEmail(email)
                 .orElseThrow(() -> new UserNotFoundException("User not found: " + email));
-        return new UserProfileResponse(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName());
+        return toProfile(user);
     }
 
     public UserProfileResponse getUserById(UUID id) {
         User user = userService.findById(id)
                 .orElseThrow(() -> new UserNotFoundException("User not found: " + id));
-        return new UserProfileResponse(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName());
+        return toProfile(user);
     }
 
     public UserProfileResponse updateProfile(UUID id, String firstName, String lastName) {
         User user = userService.updateProfile(id, firstName, lastName);
         logger.info("Profile updated for user: {}", user.getEmail());
-        return new UserProfileResponse(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName());
+        return toProfile(user);
+    }
+
+    public UserProfileResponse updateSettings(UUID id, String iconMode, Boolean llmEnabled) {
+        User user = userService.updateSettings(id, iconMode, llmEnabled);
+        logger.info("Settings updated for user: {}", user.getEmail());
+        return toProfile(user);
+    }
+
+    public UserSettingsResponse getUserSettings(UUID id) {
+        User user = userService.findById(id)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + id));
+        return new UserSettingsResponse(user.getIconMode(), user.getLlmEnabled());
+    }
+
+    private UserProfileResponse toProfile(User user) {
+        return new UserProfileResponse(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName(),
+                user.getIconMode(), user.getLlmEnabled());
     }
 
     public void changePassword(UUID id, String currentPassword, String newPassword) {

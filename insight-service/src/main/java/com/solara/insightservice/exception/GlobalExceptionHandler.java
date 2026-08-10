@@ -2,6 +2,7 @@ package com.solara.insightservice.exception;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -42,6 +43,13 @@ public class GlobalExceptionHandler {
         if (message.isBlank()) message = "Validation failed";
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(Map.of("error", message));
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<Map<String, String>> handleRateLimit(RateLimitExceededException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(ex.retryAfterSeconds()))
+                .body(Map.of("error", ex.getMessage(), "retryAfterSeconds", Long.toString(ex.retryAfterSeconds())));
     }
 
     @ExceptionHandler(Exception.class)

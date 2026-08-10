@@ -1,6 +1,6 @@
 <configuration>
     <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder class="ch.qos.logback.classic.encoder.JsonEncoder"/>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
     </appender>
     <root level="INFO">
         <appender-ref ref="JSON"/>

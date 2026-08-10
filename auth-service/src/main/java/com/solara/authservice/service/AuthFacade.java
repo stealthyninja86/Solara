@@ -5,6 +5,7 @@ import com.solara.authservice.dto.request.RegisterRequest;
 import com.solara.authservice.dto.response.LoginResponse;
 import com.solara.authservice.dto.response.RegisterResponse;
 import com.solara.authservice.dto.response.UserProfileResponse;
+import com.solara.authservice.dto.response.UserSettingsResponse;
 import com.solara.authservice.exception.InvalidCredentialsException;
 import com.solara.authservice.exception.UserNotFoundException;
 import org.slf4j.Logger;
@@ -76,6 +77,14 @@ public class AuthFacade {
 
     public UserProfileResponse updateProfile(UUID id, String firstName, String lastName) {
         return authService.updateProfile(id, firstName, lastName);
+    }
+
+    public UserProfileResponse updateSettings(UUID id, String iconMode, Boolean llmEnabled) {
+        return authService.updateSettings(id, iconMode, llmEnabled);
+    }
+
+    public UserSettingsResponse getUserSettings(UUID id) {
+        return authService.getUserSettings(id);
     }
 
     public void changePassword(UUID id, String currentPassword, String newPassword) {

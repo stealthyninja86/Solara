@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { CategorizedTransactionResponse, PageResponse, TransactionCategory } from "../types";
+import type { CategorizedTransactionResponse, PageResponse } from "../types";
 import { DEFAULT_USER_ID } from "../constants";
 import { api } from "../utils/api";
 import { getUserId } from "./useAuth";
@@ -8,6 +8,7 @@ export function useTransactions() {
   const [transactions, setTransactions] = useState<CategorizedTransactionResponse[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
   const [listLoading, setListLoading] = useState(false);
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -20,11 +21,6 @@ export function useTransactions() {
   const [updatedUI, setUpdatedUI] = useState<"idle" | "from">("idle");
   const [dateFilterKey, setDateFilterKey] = useState(0);
   const [bulkImportFilter, setBulkImportFilter] = useState<boolean | null>(null);
-  const [detailTransaction, setDetailTransaction] = useState<CategorizedTransactionResponse | null>(null);
-  const [editMerchant, setEditMerchant] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [editCategory, setEditCategory] = useState<TransactionCategory | "">("");
-  const [detailLoading, setDetailLoading] = useState(false);
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [pageSize, setPageSizeState] = useState(10);
 
@@ -55,6 +51,7 @@ export function useTransactions() {
         const data: PageResponse = await response.json();
         setTransactions(data.content);
         setTotalPages(data.totalPages);
+        setTotalElements(data.totalElements);
         setCurrentPage(data.number);
       }
     } catch {
@@ -63,57 +60,29 @@ export function useTransactions() {
       setListLoading(false);
       setPullRefreshing(false);
     }
-  }, [sortBy, sortDir, categoryFilter, paymentFilter, updatedAtFrom, dateFilterKey, pageSize, bulkImportFilter]);
+  }, [sortBy, sortDir, categoryFilter, paymentFilter, updatedAtFrom, dateFilterKey, pageSize, bulkImportFilter, dateFrom, dateTo]);
 
   useEffect(() => {
-    fetchTransactions(0);
+    if (dateFrom) fetchTransactions(0);
   }, [fetchTransactions]);
 
-  async function handleDelete(id: string) {
+  async function handleDelete(id: string): Promise<boolean> {
     try {
-      const response = await api(`/api/v1/transactions/${id}`, {
-        method: "DELETE",
-      });
-      if (response.ok) {
-        window.location.reload();
+      const [transactionResult, insightResult] = await Promise.allSettled([
+        api(`/api/v1/transactions/${id}?userId=${getUserId() ?? DEFAULT_USER_ID}`, { method: "DELETE" }),
+        api(`/api/v1/category/transaction/${id}`, { method: "DELETE" }),
+      ]);
+      const transactionResponse =
+        transactionResult.status === "fulfilled" ? transactionResult.value : null;
+      void insightResult;
+      const transactionSuccess = transactionResponse?.ok || transactionResponse?.status === 404;
+      if (transactionSuccess) {
+        await fetchTransactions(currentPage);
+        return true;
       }
+      return false;
     } catch {
-      // silent
-    }
-  }
-
-  function openDetailModal(transaction: CategorizedTransactionResponse) {
-    setDetailTransaction(transaction);
-    setEditMerchant(transaction.merchant ?? "");
-    setEditDescription(transaction.originalDescription ?? "");
-    setEditCategory(transaction.category ?? "");
-  }
-
-  async function handleDetailSave() {
-    if (!detailTransaction) return;
-    setDetailLoading(true);
-    try {
-      const response = await api(
-        `/api/v1/category/transaction/${detailTransaction.transactionId}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            merchant: editMerchant.trim(),
-            originalDescription: editDescription.trim(),
-            category: editCategory.trim(),
-          }),
-        }
-      );
-      if (response.ok) {
-        const updated: CategorizedTransactionResponse = await response.json();
-        setDetailTransaction(updated);
-        fetchTransactions(currentPage);
-      }
-    } catch {
-      // silent
-    } finally {
-      setDetailLoading(false);
+      return false;
     }
   }
 
@@ -132,7 +101,7 @@ export function useTransactions() {
   }
 
   return {
-    transactions, currentPage, totalPages, listLoading, pullRefreshing, setPullRefreshing,
+    transactions, currentPage, totalPages, totalElements, listLoading, pullRefreshing, setPullRefreshing,
     sortBy, sortDir,
     categoryFilter, setCategoryFilter,
     paymentFilter, setPaymentFilter,
@@ -140,13 +109,8 @@ export function useTransactions() {
     updatedAtFrom, setUpdatedAtFrom, updatedUI, setUpdatedUI,
     dateFilterKey, setDateFilterKey,
     bulkImportFilter, setBulkImportFilter,
-    detailTransaction, setDetailTransaction,
-    editMerchant, setEditMerchant,
-    editDescription, setEditDescription,
-    editCategory, setEditCategory,
-    detailLoading,
     pageSize, setPageSize,
-    fetchTransactions, handleDelete, openDetailModal, handleDetailSave,
+    fetchTransactions, handleDelete,
     toggleSort, sortIndicator,
   };
 }

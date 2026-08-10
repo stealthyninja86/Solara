@@ -65,9 +65,9 @@ public class TransactionService {
     }
 
     @Transactional
-    public TransactionResponse update(UUID id, UpdateTransactionRequest updateRequest) {
+    public TransactionResponse update(UUID id, UUID userId, UpdateTransactionRequest updateRequest) {
         long start = System.currentTimeMillis();
-        Transaction transaction = transactionRepository.findById(id)
+        Transaction transaction = transactionRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Transaction not found"));
 
         UpdateTransactionRequest cleanedRequest = new UpdateTransactionRequest(
@@ -85,25 +85,25 @@ public class TransactionService {
         return toResponse(transaction);
     }
 
-    public TransactionResponse findById(UUID id) {
-        Transaction transaction = transactionRepository.findById(id)
+    public TransactionResponse findById(UUID id, UUID userId) {
+        Transaction transaction = transactionRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Transaction not found"));
         log.debug("Transaction found: id={}, merchant={}", transaction.getId(), transaction.getMerchant());
         return toResponse(transaction);
     }
 
-    public List<TransactionResponse> findAll() {
-        List<Transaction> transactions = transactionRepository.findAll();
-        log.debug("Transaction list returned: count={}", transactions.size());
+    public List<TransactionResponse> findAll(UUID userId) {
+        List<Transaction> transactions = transactionRepository.findAllByUserIdOrderByCreatedAtDesc(userId);
+        log.debug("Transaction list returned: userId={}, count={}", userId, transactions.size());
         return transactions.stream()
                 .map(this::toResponse)
                 .toList();
     }
 
     @Transactional
-    public void delete(UUID id) {
+    public void delete(UUID id, UUID userId) {
         long start = System.currentTimeMillis();
-        Transaction transaction = transactionRepository.findById(id)
+        Transaction transaction = transactionRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Transaction not found"));
 
         outboxRepository.save(OutboxEntity.forDeletedTransaction(transaction));

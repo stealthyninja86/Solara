@@ -4,8 +4,12 @@ import com.solara.authservice.dto.request.ChangePasswordRequest;
 import com.solara.authservice.dto.request.LoginRequest;
 import com.solara.authservice.dto.request.RegisterRequest;
 import com.solara.authservice.dto.request.UpdateProfileRequest;
+import com.solara.authservice.dto.request.UpdateSettingsRequest;
 import com.solara.authservice.dto.response.AuthResponse;
+import com.solara.authservice.dto.response.ChangePasswordResponse;
 import com.solara.authservice.dto.response.UserProfileResponse;
+import com.solara.authservice.dto.response.UserSettingsResponse;
+import com.solara.authservice.exception.InvalidPasswordException;
 import com.solara.authservice.service.AuthFacade;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -18,7 +22,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -127,16 +130,31 @@ public class AuthController {
         return ResponseEntity.ok(user);
     }
 
+    @PatchMapping("/profile/settings")
+    public ResponseEntity<UserProfileResponse> updateSettings(@Valid @RequestBody UpdateSettingsRequest request) {
+        var auth = (JwtAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
+        assert auth != null;
+        UUID userId = UUID.fromString(Objects.requireNonNull(auth.getToken().getSubject()));
+        UserProfileResponse user = authFacade.updateSettings(userId, request.iconMode(), request.llmEnabled());
+        log.info("Settings updated for user: {}", user.email());
+        return ResponseEntity.ok(user);
+    }
+
+    @GetMapping("/users/{userId}/settings")
+    public ResponseEntity<UserSettingsResponse> getUserSettings(@PathVariable UUID userId) {
+        return ResponseEntity.ok(authFacade.getUserSettings(userId));
+    }
+
     @PutMapping("/password")
-    public ResponseEntity<Map<String, String>> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+    public ResponseEntity<ChangePasswordResponse> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         if (!request.newPassword().equals(request.confirmPassword())) {
-            return ResponseEntity.badRequest().body(Map.of("error", "New password and confirm password do not match"));
+            throw new InvalidPasswordException("New password and confirm password do not match");
         }
         var auth = (JwtAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
         assert auth != null;
         UUID userId = UUID.fromString(Objects.requireNonNull(auth.getToken().getSubject()));
         authFacade.changePassword(userId, request.currentPassword(), request.newPassword());
         log.info("Password changed for user id: {}", userId);
-        return ResponseEntity.ok(Map.of("message", "Password changed successfully"));
+        return ResponseEntity.ok(new ChangePasswordResponse("Password changed successfully"));
     }
 }

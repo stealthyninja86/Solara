@@ -4,7 +4,7 @@ import com.solara.insightservice.dto.response.CategorizedTransactionResponse;
 import com.solara.insightservice.dto.request.RecategorizeRequest;
 import com.solara.insightservice.dto.request.UpdateTransactionRequest;
 import com.solara.insightservice.model.CategorizedTransaction;
-import com.solara.insightservice.service.CategorizationService;
+import com.solara.insightservice.service.categorization.CategorizationService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

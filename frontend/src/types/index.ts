@@ -13,9 +13,10 @@ export type PaymentMode =
 export type TransactionType = "DEBIT" | "CREDIT";
 
 export type TransactionCategory =
-  | "FOOD_DINING" | "TRANSPORT" | "SHOPPING" | "ENTERTAINMENT"
-  | "BILLS_UTILITIES" | "HEALTHCARE" | "GROCERIES" | "RENT"
-  | "SALARY" | "INVESTMENT" | "EDUCATION" | "TRAVEL" | "OTHER";
+  | "FOOD_DINING" | "TRANSPORT" | "FUEL" | "SHOPPING" | "CLOTHING" | "ELECTRONICS"
+  | "ENTERTAINMENT" | "BILLS_UTILITIES" | "HEALTHCARE" | "GROCERIES" | "PET" | "RENT"
+  | "LOAN_EMI" | "SALARY" | "INVESTMENT" | "EDUCATION" | "TRAVEL" | "OTHER"
+  | "UNCATEGORIZED";
 
 export interface CreateTransactionRequest {
   userId: string;
@@ -24,6 +25,7 @@ export interface CreateTransactionRequest {
   paymentMode: PaymentMode;
   type: TransactionType;
   description?: string;
+  transactionDate?: string;
 }
 
 export interface TransactionResponse {
@@ -40,6 +42,7 @@ export interface CategorizedTransactionResponse {
   userId: string;
   merchant: string;
   originalDescription: string | null;
+  description: string | null;
   amount: number;
   currency: string;
   type: TransactionType | null;

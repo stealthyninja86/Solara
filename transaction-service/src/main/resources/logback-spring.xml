@@ -1,6 +1,6 @@
 <configuration>
     <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder class="ch.qos.logback.classic.encoder.JsonEncoder"/>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
     </appender>
     <logger name="com.solara.transactionservice.service.BulkImportService" level="DEBUG"/>
     <root level="INFO">
