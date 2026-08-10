@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "transaction.updated.v1",
+  "type": "object",
+  "required": ["eventId", "eventVersion", "eventType", "occurredAt", "payload"],
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "eventVersion": { "const": "1" },
+    "eventType": { "const": "transaction.updated.v1" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "payload": {
+      "type": "object",
+      "required": ["transactionId", "userId", "merchant", "description", "amount", "currency", "paymentMode", "type", "timestamp", "isBulkImport"],
+      "properties": {
+        "transactionId": { "type": "string", "format": "uuid" },
+        "userId": { "type": "string", "format": "uuid" },
+        "merchant": { "type": "string" },
+        "description": { "type": ["string", "null"] },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "paymentMode": { "type": "string" },
+        "type": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "isBulkImport": { "type": "boolean" }
+      }
+    }
+  }
+}

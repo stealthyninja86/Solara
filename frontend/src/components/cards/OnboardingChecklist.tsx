@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Icon } from "../ui/Icon";
+import { useAuth } from "../../hooks/useAuth";
 
 interface Props {
   hasIncome: boolean;
@@ -23,6 +24,7 @@ interface TutorialItem {
 }
 
 export function OnboardingChecklist({ hasIncome, hasTransactions, hasBudget }: Props) {
+  const { llmEnabled } = useAuth();
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [, rerender] = useState(0);
 
@@ -252,21 +254,26 @@ export function OnboardingChecklist({ hasIncome, hasTransactions, hasBudget }: P
         ))}
       </div>
 
-      <div className="mt-2 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-bg-hover)] p-3">
-        <div className="flex items-start gap-2">
-          <Icon name="tip" size={13} className="mt-0.5 shrink-0" />
-          <ul className="flex min-w-0 list-disc flex-col gap-1 pl-4">
-            <li className="font-bold text-[0.7rem] leading-snug text-[var(--color-text)]">
-              The AI may not always categorize transactions correctly — review them once the import is done.
-            </li>
-            <li className="font-semibold text-[0.7rem] leading-snug text-[var(--color-text)]">
-              If AI settings are off, categorization, overview, and recommendations won't be available and
-              imported transactions remain uncategorized — categorize them after the CSV upload for accurate
-              reports. Enable AI settings to view your daily insights.
-            </li>
-          </ul>
+      {llmEnabled !== null && (
+        <div className="mt-2 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-bg-hover)] p-3">
+          <div className="flex items-start gap-2">
+            <Icon name="tip" size={13} className="mt-0.5 shrink-0" />
+            <ul className="flex min-w-0 list-disc flex-col gap-1 pl-4">
+              {llmEnabled ? (
+                <li className="font-bold text-[0.7rem] leading-snug text-[var(--color-text)]">
+                  The AI may not always categorize transactions correctly — review them once the import is done.
+                </li>
+              ) : (
+                <li className="font-semibold text-[0.7rem] leading-snug text-[var(--color-text)]">
+                  If AI settings are off, categorization, overview, and recommendations won't be available and
+                  imported transactions remain uncategorized — categorize them after the CSV upload for accurate
+                  reports. Enable AI settings to view your daily insights.
+                </li>
+              )}
+            </ul>
+          </div>
         </div>
-      </div>
+      )}
     </section>
   );
 }

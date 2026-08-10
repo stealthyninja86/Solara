@@ -96,7 +96,7 @@ Run it on your laptop, a Raspberry Pi, or a full AWS account. The data model, th
 
 
 - **3 microservices + API gateway** — each service owns its own PostgreSQL database and talks to others only through Kafka events. No direct service-to-service HTTP calls.
-- **Transactional outbox + CQRS** — transactions publish events through the outbox pattern; the insight service consumes them to update categorizations and projections. A separate `analytics_db` keeps reads fast without blocking writes.
+- **Transactional outbox + CQRS** — transactions publish events through the outbox pattern; the insight service consumes them to build the `categorized_transactions` read model (reports aggregate it directly; monthly-set income & budget live in `budget_settings`). Each service owns its own PostgreSQL database; a separate `analytics_db` keeps reads fast without blocking writes.
 - **Idempotent consumers** — a `processed_events` table prevents duplicate processing.
 - **Resilience4j** — circuit breakers and retry with exponential backoff on LLM calls, dead-letter queues for poison pills.
 - **Cache stampede protection** — Redis TTLs use ±20% jitter to prevent synchronized expiry thundering on the database.

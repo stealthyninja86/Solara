@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bulk.import.completed.v1",
+  "type": "object",
+  "required": ["eventId", "eventVersion", "eventType", "occurredAt", "payload"],
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "eventVersion": { "const": "1" },
+    "eventType": { "const": "bulk.import.completed.v1" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "payload": {
+      "type": "object",
+      "required": ["userId", "count", "failedCount"],
+      "properties": {
+        "userId": { "type": "string", "format": "uuid" },
+        "count": { "type": "integer", "minimum": 0 },
+        "failedCount": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
