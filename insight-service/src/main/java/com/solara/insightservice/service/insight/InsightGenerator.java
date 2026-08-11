@@ -11,6 +11,7 @@ import com.solara.insightservice.service.insight.InsightValidator;
 import com.solara.insightservice.service.report.ReportService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -43,17 +44,20 @@ public class InsightGenerator {
     private final InsightValidator validator;
     private final InsightTextWriter textWriter;
     private final InsightPipeMetrics metrics;
+    private final boolean aiEnabled;
 
     public InsightGenerator(ReportService reportService,
                             InsightFeedCache cache,
                             InsightValidator validator,
                             InsightTextWriter textWriter,
-                            InsightPipeMetrics metrics) {
+                            InsightPipeMetrics metrics,
+                            @Value("${app.ai.enabled:true}") boolean aiEnabled) {
         this.reportService = reportService;
         this.cache = cache;
         this.validator = validator;
         this.textWriter = textWriter;
         this.metrics = metrics;
+        this.aiEnabled = aiEnabled;
     }
 
     public List<InsightCardResponse> feed(UUID userId, ReportPeriod period, LocalDate at,
@@ -142,7 +146,7 @@ public class InsightGenerator {
     }
 
     private InsightTextResponse generate(boolean llmEnabled, InsightFact fact) {
-        if (!llmEnabled) {
+        if (!llmEnabled || !aiEnabled) {
             metrics.generationDropped();
             return null;
         }

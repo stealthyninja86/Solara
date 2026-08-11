@@ -16,6 +16,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.annotation.DltHandler;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -37,19 +38,22 @@ public class EmbeddingWorker {
     private final MerchantKnowledgeBaseRepository knowledgeBaseRepository;
     private final MerchantResolver merchantResolver;
     private final EmbeddingModel embeddingModel;
+    private final boolean aiEnabled;
 
     public EmbeddingWorker(ObjectMapper objectMapper,
                            ProcessedEventRepository processedEventRepository,
                            MerchantProfileRepository merchantProfileRepository,
                            MerchantKnowledgeBaseRepository knowledgeBaseRepository,
                            MerchantResolver merchantResolver,
-                           EmbeddingModel embeddingModel) {
+                           EmbeddingModel embeddingModel,
+                           @Value("${app.ai.enabled:true}") boolean aiEnabled) {
         this.objectMapper = objectMapper;
         this.processedEventRepository = processedEventRepository;
         this.merchantProfileRepository = merchantProfileRepository;
         this.knowledgeBaseRepository = knowledgeBaseRepository;
         this.merchantResolver = merchantResolver;
         this.embeddingModel = embeddingModel;
+        this.aiEnabled = aiEnabled;
     }
 
     @RetryableTopic(
@@ -76,6 +80,12 @@ public class EmbeddingWorker {
             }
 
             TransactionCategorizedEventPayload payload = event.payload();
+            if (!aiEnabled) {
+                log.debug("AI disabled (app.ai.enabled=false) — skipping profile/KB learning: eventId={}, merchant={}",
+                        event.eventId(), payload.merchant());
+                ack.acknowledge();
+                return;
+            }
             if (payload.previousMerchant() != null && !payload.previousMerchant().isBlank()) {
                 merchantProfileRepository.deleteByUserIdAndNormalizedMerchant(
                         payload.userId(), payload.previousMerchant());

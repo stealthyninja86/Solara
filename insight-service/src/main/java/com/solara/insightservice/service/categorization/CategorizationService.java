@@ -69,6 +69,9 @@ public class CategorizationService {
     @Value("${app.cache.agent-ttl-seconds:86400}")
     private long baseTtl;
 
+    @Value("${app.ai.enabled:true}")
+    private boolean aiEnabled;
+
     public CategorizationService(CategorizedTransactionRepository transactionRepository,
                                  StringRedisTemplate redis,
                                  ObjectMapper objectMapper,
@@ -177,14 +180,15 @@ public class CategorizationService {
     }
 
     private List<LLMStrategy> activeStrategiesFor(UUID userId) {
-        if (userSettingsService.isLlmEnabled(userId)) {
+        if (aiEnabled && userSettingsService.isLlmEnabled(userId)) {
             return strategies;
         }
         return strategies.stream().filter(strategy -> !strategy.usesLlm()).toList();
     }
 
     private List<LLMStrategy> batchStrategiesFor(List<CategorizationInput> inputs) {
-        boolean llmAllowed = inputs.stream().allMatch(input -> userSettingsService.isLlmEnabled(input.userId()));
+        boolean llmAllowed = aiEnabled
+                && inputs.stream().allMatch(input -> userSettingsService.isLlmEnabled(input.userId()));
         if (llmAllowed) {
             return strategies;
         }
