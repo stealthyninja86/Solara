@@ -19,6 +19,27 @@
 *.tar.gz
 *.rar
 
+# Uploaded files
+data/uploads/*
+!data/uploads/.gitkeep
+
+# Frontend runtime state on the demo host (docker-compose bind mounts)
+# certs/ holds the Let's Encrypt key material copied by the certbot deploy hook
+/certs/
+/certbot-webroot/
+
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+/frontend/dist/
+/frontend/node_modules/
+
+# Local dev state — never commit
+.ci-m2/
+.idea/
+.DS_Store
+*.tsbuildinfo
+
+# Secrets + runtime data — one `git add .` from being public
+**/keys/
+/auth-service/auth-service-db/
