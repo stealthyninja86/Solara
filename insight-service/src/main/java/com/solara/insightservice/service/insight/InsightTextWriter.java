@@ -131,9 +131,11 @@ public class InsightTextWriter {
     private final Executor cardTextExecutor;
     private final HttpClient probeClient;
     private final URI ollamaTagsEndpoint;
+    private final boolean aiEnabled;
 
     public InsightTextWriter(ChatModel chatModel, ObjectMapper objectMapper,
-                             @Value("${spring.ai.ollama.base-url}") String ollamaBaseUrl) {
+                             @Value("${spring.ai.ollama.base-url:http://host.docker.internal:11434}") String ollamaBaseUrl,
+                             @Value("${app.ai.enabled:true}") boolean aiEnabled) {
         this.chatClient = ChatClient.create(chatModel);
         this.objectMapper = objectMapper;
         this.chatOptionsBuilder = OllamaChatOptions.builder()
@@ -145,6 +147,7 @@ public class InsightTextWriter {
                 .connectTimeout(PROBE_TIMEOUT)
                 .build();
         this.ollamaTagsEndpoint = URI.create(ollamaBaseUrl + "/api/tags");
+        this.aiEnabled = aiEnabled;
     }
 
     @CircuitBreaker(name = "insight-generator", fallbackMethod = "degraded")
@@ -162,6 +165,10 @@ public class InsightTextWriter {
     }
 
     private InsightTextResponse callModel(InsightFact fact, String rejection) {
+        if (!aiEnabled) {
+            log.debug("AI disabled (app.ai.enabled=false) — no card text call: fact={}", fact.id());
+            return null;
+        }
         long start = System.currentTimeMillis();
         String response = chatClient.prompt()
                 .system(promptFor(fact.type()))
@@ -179,6 +186,9 @@ public class InsightTextWriter {
     }
 
     public boolean isAvailable() {
+        if (!aiEnabled) {
+            return false;
+        }
         try {
             HttpRequest request = HttpRequest.newBuilder(ollamaTagsEndpoint)
                     .timeout(PROBE_TIMEOUT)
