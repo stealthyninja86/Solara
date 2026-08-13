@@ -45,7 +45,10 @@ fi
 # --- 3. repo (public, no credentials) ---
 mkdir -p /srv/solara
 if [ ! -d /srv/solara/.git ]; then
-  git clone https://github.com/stealthyninja86/service_categorizer.git /srv/solara
+  # Deploy branch is `production` — the default-branch clone would land on `main`,
+  # which carries no deployment assets and no CI (ea91877). make deploy / git pull
+  # on the host must track production.
+  git clone -b production --single-branch https://github.com/stealthyninja86/Solara.git /srv/solara
 fi
 cd /srv/solara
 
