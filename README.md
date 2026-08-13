@@ -87,7 +87,7 @@ Solara processes **only transaction data** — merchant description, amount, and
 
 ### Open-Weight Models Run Locally by Default
 
-Categorization uses **Qwen3 4B** (open-weight) and **Nomic Embed Text** embeddings via **Ollama** — open-weight models that run **on your own infrastructure**. No proprietary-model vendor sees your transactions. Cloud model providers are entirely optional and **disabled by default** (commented out in config), so nothing leaves your environment unless you deliberately opt in.
+Categorization uses **Qwen3.5 4B** (open-weight) and **Nomic Embed Text** embeddings via **Ollama** — open-weight models that run **on your own infrastructure**. No proprietary-model vendor sees your transactions. Cloud model providers are entirely optional and **disabled by default** (commented out in config), so nothing leaves your environment unless you deliberately opt in.
 
 ### Responsible AI
 
@@ -96,7 +96,7 @@ Categorization uses **Qwen3 4B** (open-weight) and **Nomic Embed Text** embeddin
 
 ### No Lock-In
 
-Run it on your laptop, a Raspberry Pi, or a full AWS account. The data model, the categorizer, and the UI are the same everywhere — switching deployment is a `docker-compose` command away, not a migration project.
+Run it on your laptop, a Raspberry Pi, or a full AWS account. The data model, the categorizer, and the UI are the same everywhere — switching deployment is a `docker compose` command away, not a migration project.
 
 ---
 
@@ -124,7 +124,7 @@ git clone https://github.com/stealthyninja86/Solara.git
 cd Solara
 
 # Start all backend services
-docker-compose up
+docker compose up -d
 
 # In a new terminal — start the frontend
 cd frontend
@@ -133,12 +133,6 @@ npm run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173), register an account, and you're up.
-
-For the full observability stack, add the profile:
-
-```bash
-docker-compose --profile observability up
-```
 
 ---
 

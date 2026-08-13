@@ -15,13 +15,17 @@ public record InsightFact(
 ) {
 
     private static final Pattern TOKEN = Pattern.compile("\\[fact\\.[a-z_.]+](?:\\.(?:previous|delta))?");
+    private static final Pattern INNER_TOKEN_SUFFIX = Pattern.compile("\\[fact\\.([a-z_]+)\\.(previous|delta)]");
 
     public String tokenReference() {
         return "[fact." + id + "]";
     }
 
     public String renderTokens(String text) {
-        return TOKEN.matcher(text).replaceAll(match -> {
+        // Normalize the model's inner-dot form ([fact.x.previous]) to the
+        // canonical outer-dot form ([fact.x].previous) so both render.
+        String normalized = INNER_TOKEN_SUFFIX.matcher(text).replaceAll("[fact.$1].$2");
+        return TOKEN.matcher(normalized).replaceAll(match -> {
             String token = match.group();
             if (token.equals(tokenReference())) {
                 return value();

@@ -64,13 +64,16 @@ public class TransactionEventConsumer {
 
             if (!claim(event)) {
                 if (workAlreadyDone(event)) {
-                    log.debug("Event already processed, acking: eventId={}, eventType={}",
-                            event.eventId(), event.eventType());
+                    log.info("Event claim skipped (already processed): eventId={}, eventType={}, topic={}, partition={}, offset={}",
+                            event.eventId(), event.eventType(), record.topic(), record.partition(), record.offset());
                     ack.acknowledge();
                     return;
                 }
                 reclaim(event);
             }
+
+            log.info("Event claimed: eventId={}, eventType={}, topic={}, partition={}, offset={}",
+                    event.eventId(), event.eventType(), record.topic(), record.partition(), record.offset());
 
             switch (event.eventType()) {
                 case "transaction.created.v1", "transaction.updated.v1" ->
@@ -85,8 +88,9 @@ public class TransactionEventConsumer {
             }
 
             ack.acknowledge();
-            log.debug("Event processed: eventId={}, eventType={}, durationMs={}",
-                    event.eventId(), event.eventType(), System.currentTimeMillis() - start);
+            log.info("Event processed: eventId={}, eventType={}, topic={}, partition={}, offset={}, durationMs={}",
+                    event.eventId(), event.eventType(), record.topic(), record.partition(), record.offset(),
+                    System.currentTimeMillis() - start);
         } catch (Exception e) {
             log.error("Error processing event on topic {} (key={}): {}",
                     record.topic(), record.key(), e.getMessage(), e);

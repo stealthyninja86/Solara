@@ -8,7 +8,6 @@ import com.solara.insightservice.model.ReportPeriod;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -36,12 +35,5 @@ public class OverviewService {
                 InsightType.OVERVIEW, force);
         log.debug("overview returned: userId={}, count={}", userId, cards.size());
         return cards;
-    }
-
-    public Flux<InsightCardResponse> overviewStream(UUID userId, ReportPeriod period, LocalDate at, boolean force) {
-        log.debug("overview stream requested: userId={}, period={}, at={}, force={}", userId, period, at, force);
-        LocalDate anchor = at != null ? at : LocalDate.now();
-        boolean llmEnabled = userSettingsService.isLlmEnabled(userId);
-        return insightGenerator.feedStream(userId, period, anchor, llmEnabled, InsightType.OVERVIEW, force);
     }
 }

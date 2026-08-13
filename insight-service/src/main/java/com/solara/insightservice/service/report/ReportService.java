@@ -26,6 +26,7 @@ import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -51,6 +52,11 @@ public class ReportService {
 
     private static final List<TransactionCategory> CATEGORY_SUM_EXCLUDED =
             List.of(TransactionCategory.BUDGET, TransactionCategory.INVESTMENT);
+
+    private static final List<TransactionCategory> INVESTMENT_ONLY_EXCLUDED =
+            Arrays.stream(TransactionCategory.values())
+                    .filter(category -> category != TransactionCategory.INVESTMENT)
+                    .toList();
 
     private final CategorizedTransactionRepository categorizedTransactionRepository;
     private final FinanceQueryService financeQueryService;
@@ -203,6 +209,15 @@ public class ReportService {
                     InsightType.STATUS,
                     "your savings left after spending, with your income alongside for comparison"));
         }
+        if (summary.income().signum() > 0) {
+            BigDecimal invested = investedThisPeriod(userId, report);
+            if (invested.signum() > 0) {
+                facts.add(new InsightFact("investment_amount", "Invested amount",
+                        rupees(invested), null, null,
+                        InsightType.STATUS,
+                        "the amount moved into investments this period; encourage consistent investing as a healthy habit, never advise selling or stopping investments"));
+            }
+        }
         // Only meaningful with income set: with income 0/unset, savings is
         // always negative and "spending exceeded income" is a false alarm.
         if (summary.income().signum() > 0 && summary.expenses().signum() > 0 && summary.savings().signum() < 0) {
@@ -211,7 +226,7 @@ public class ReportService {
                     InsightType.ACTION,
                     "how much more was spent than was earned, with the income alongside for comparison; there is no change value"));
         }
-        if (!categories.isEmpty()) {
+        if (!categories.isEmpty() && summary.expenses().signum() > 0) {
             ReportCategorySpending top = categories.getFirst();
             BigDecimal share = top.amount().multiply(HUNDRED)
                     .divide(summary.expenses(), 0, RoundingMode.HALF_UP);
@@ -222,6 +237,8 @@ public class ReportService {
                 // change is the share movement in percentage points.
                 String previousShareValue = null;
                 String shareChange = null;
+                String previousShareHint = "";
+                String changeHint = "";
                 ReportRange previousRange = previousRange(period, report.from());
                 ReportSummary previousSummary = buildSummary(userId, period, previousRange);
                 if (previousSummary.expenses().signum() > 0) {
@@ -232,13 +249,15 @@ public class ReportService {
                                 .divide(previousSummary.expenses(), 0, RoundingMode.HALF_UP);
                         previousShareValue = previousShare + "% of spending";
                         shareChange = Integer.toString(share.subtract(previousShare).intValue());
+                        previousShareHint = "the previous value is last period's share of the same category; ";
+                        changeHint = "the change value is how that share moved, in percentage points; ";
                     }
                 }
                 facts.add(new InsightFact("top_category_share",
                         prettyCategory(top.category()),
                         share + "% of spending", previousShareValue,
                         shareChange, InsightType.ACTION,
-                        "the share of this period's total spending that went to the largest category; the previous value is last period's share of the same category; the change value is how that share moved, in percentage points; this is a concentration risk — advise spreading spending across categories, never advise spending more"));
+                        "the fact label is the NAME of the largest spending category — always use that exact name in the body (for example write it as \"your " + prettyCategory(top.category()).toLowerCase() + " spending\"); the value is the share of this period's total spending that went to that category; " + previousShareHint + changeHint + "this is a concentration risk — advise spreading spending across categories, never advise spending more"));
             }
         }
         ReportSummary previous = buildSummary(userId, period, previousRange(period, report.from()));
@@ -251,6 +270,12 @@ public class ReportService {
                         rupees(summary.expenses()), rupees(previous.expenses()),
                         delta.toString(), InsightType.NEXT,
                         "your total spending this period, with last period's total alongside; the change value is the percentage change between them"));
+            }
+            if (delta.abs().compareTo(FIFTEEN) >= 0) {
+                facts.add(new InsightFact("spending_vs_previous", "Spending vs previous period",
+                        rupees(summary.expenses()), rupees(previous.expenses()),
+                        delta.toString(), InsightType.ACTION,
+                        "how this period's total spending compares to the previous period's total; the previous value is the previous period's total and the change value is the percentage change between them; the change is POSITIVE when spending rose and NEGATIVE when it fell — never invert the sign; say plainly whether spending rose or fell and by how much; if it rose, give one concrete recommendation to bring it back down (for example review the largest spending category or cut a specific non-essential expense); if it fell, briefly acknowledge the improvement"));
             }
         }
         return facts;
@@ -373,6 +398,15 @@ public class ReportService {
                     : TransactionCategory.UNCATEGORIZED;
             totals.merge(category, (BigDecimal) row[1], BigDecimal::add);
         }
+    }
+
+    private BigDecimal investedThisPeriod(UUID userId, ReportResponse report) {
+        Instant from = report.from().atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant to = report.to().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Map<TransactionCategory, BigDecimal> totals = new HashMap<>();
+        addCategorySums(totals, categorizedTransactionRepository.sumByCategoryAndTypeBetween(
+                userId, "DEBIT", INVESTMENT_ONLY_EXCLUDED, from, to));
+        return totals.getOrDefault(TransactionCategory.INVESTMENT, BigDecimal.ZERO);
     }
 
     private BigDecimal netExpenses(UUID userId, ReportRange range) {

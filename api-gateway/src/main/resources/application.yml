@@ -49,7 +49,7 @@ spring:
                     name: insightServiceCB
                     fallbackUri: forward:/fallback/insight
               metadata:
-                response-timeout: 120000
+                response-timeout: 300000
 
             - id: insight-service-insights
               uri: http://insight-service:4003
@@ -61,7 +61,7 @@ spring:
                     name: insightServiceCB
                     fallbackUri: forward:/fallback/insight
               metadata:
-                response-timeout: 120000
+                response-timeout: 300000
 
           default-filters:
             - name: RequestRateLimiter
@@ -124,6 +124,18 @@ resilience4j:
         waitDurationInOpenState: 30s
         permittedNumberOfCallsInHalfOpenState: 5
         minimumNumberOfCalls: 10
+
+  # The CircuitBreaker filter wraps routed calls in an implicit TimeLimiter.
+  # Its default timeout is 1000ms — every LLM-generating insight call (>1s)
+  # was killed at 1s and fell back to /fallback/insight (503). 120s is the
+  # hard cap; the insight routes' response-timeout metadata (300000ms) only
+  # starts counting once the TimeLimiter has given up, so per-request latency
+  # is bounded by the TimeLimiter alone.
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 120s
+        cancel-running-future: true
 
 management:
   endpoints:

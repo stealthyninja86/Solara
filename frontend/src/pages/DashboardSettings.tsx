@@ -208,7 +208,7 @@ export function DashboardSettings() {
           </div>
         </section>
 
-        <section className="card max-w-md rounded-2xl p-6">
+        <section className="card max-w-md rounded-2xl p-6 opacity-50 grayscale">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-caption font-semibold text-[var(--color-text)]">AI Features</h2>
@@ -220,8 +220,8 @@ export function DashboardSettings() {
             </div>
             <button
               onClick={handleLlmToggle}
-              disabled={llmSaving}
-              className={`relative h-6 w-11 rounded-full transition-colors ${
+              disabled
+              className={`relative h-6 w-11 rounded-full transition-colors cursor-not-allowed ${
                 llmOn ? "bg-[var(--color-ok)]" : "bg-[var(--color-border-emphasis)]"
               }`}
               role="switch"

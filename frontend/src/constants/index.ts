@@ -2,7 +2,7 @@ import type { PaymentMode, TransactionCategory, TransactionType } from "../types
 
 export const TRANSACTION_TYPES: TransactionType[] = ["DEBIT", "CREDIT"];
 
-export const BANK_FORMATS = ["HDFC", "ICICI", "AXIS", "SBI", "KOTAK"];
+
 
 export const PAYMENT_MODES: PaymentMode[] = [
   "CASH", "CREDIT_CARD", "DEBIT_CARD", "UPI",

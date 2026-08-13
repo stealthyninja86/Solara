@@ -1,28 +1,31 @@
 package com.solara.insightservice.service.insight;
 
-import com.solara.insightservice.dto.response.InsightTextResponse;
+import com.solara.insightservice.config.TracedExecutors;
 import com.solara.insightservice.dto.response.InsightCardResponse;
 import com.solara.insightservice.dto.response.InsightFact;
+import com.solara.insightservice.dto.response.InsightTextResponse;
 import com.solara.insightservice.metrics.InsightPipeMetrics;
+import com.solara.insightservice.model.CardRejectionReason;
 import com.solara.insightservice.model.InsightType;
 import com.solara.insightservice.model.ReportPeriod;
-import com.solara.insightservice.service.insight.InsightTextWriter;
-import com.solara.insightservice.service.insight.InsightValidator;
 import com.solara.insightservice.service.report.ReportService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
 
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -45,6 +48,8 @@ public class InsightGenerator {
     private final InsightTextWriter textWriter;
     private final InsightPipeMetrics metrics;
     private final boolean aiEnabled;
+    private final Executor generationExecutor;
+    private final Map<String, Boolean> generationsInFlight = new ConcurrentHashMap<>();
 
     public InsightGenerator(ReportService reportService,
                             InsightFeedCache cache,
@@ -58,6 +63,8 @@ public class InsightGenerator {
         this.textWriter = textWriter;
         this.metrics = metrics;
         this.aiEnabled = aiEnabled;
+        this.generationExecutor = TracedExecutors.decorated(Executors.newThreadPerTaskExecutor(
+                Thread.ofVirtual().name("insight-generation-", 0).factory()));
     }
 
     public List<InsightCardResponse> feed(UUID userId, ReportPeriod period, LocalDate at,
@@ -67,7 +74,6 @@ public class InsightGenerator {
 
     public List<InsightCardResponse> feed(UUID userId, ReportPeriod period, LocalDate at,
                                           boolean llmEnabled, Set<InsightType> types, boolean force) {
-        long start = System.currentTimeMillis();
         if (!force) {
             List<InsightCardResponse> cached = cache.get(userId, period, at, types);
             if (cached != null) {
@@ -76,12 +82,46 @@ public class InsightGenerator {
                 return cached;
             }
         }
+        if (!llmEnabled || !aiEnabled) {
+            log.debug("Feed empty — not cached (LLM unavailable or disabled): userId={}, period={}, at={}, types={}",
+                    userId, period, at, InsightType.cacheSuffix(types));
+            return List.of();
+        }
+        String generationKey = generationKey(userId, period, at, types);
+        if (generationsInFlight.putIfAbsent(generationKey, Boolean.TRUE) != null) {
+            log.info("Insight generation already in flight — returning empty: userId={}, period={}, at={}, types={}",
+                    userId, period, at, InsightType.cacheSuffix(types));
+            return List.of();
+        }
+        if (force) {
+            cache.evict(userId, period, at, types);
+            log.info("Insights cache evicted for forced regeneration: userId={}, period={}, at={}, types={}",
+                    userId, period, at, InsightType.cacheSuffix(types));
+        }
+        log.info("Insights cache miss — scheduling background generation: userId={}, period={}, at={}, types={}, force={}",
+                userId, period, at, InsightType.cacheSuffix(types), force);
+        long scheduledAt = System.currentTimeMillis();
+        generationExecutor.execute(() -> {
+            try {
+                generateAndCache(userId, period, at, types);
+            } finally {
+                generationsInFlight.remove(generationKey);
+            }
+            log.info("Background insight generation completed: userId={}, period={}, at={}, types={}, durationMs={}",
+                    userId, period, at, InsightType.cacheSuffix(types),
+                    System.currentTimeMillis() - scheduledAt);
+        });
+        return List.of();
+    }
+
+    private void generateAndCache(UUID userId, ReportPeriod period, LocalDate at, Set<InsightType> types) {
+        long start = System.currentTimeMillis();
         List<InsightCardResponse> cards = reportService.buildFacts(userId, period, at).stream()
                 .filter(fact -> types.contains(fact.type()))
                 .sorted(byImpact())
                 .limit(FEED_SIZE)
                 .map(fact -> {
-                    InsightTextResponse text = generate(llmEnabled, fact);
+                    InsightTextResponse text = generate(true, fact);
                     if (text == null) return null;
                     return buildCard(fact, text);
                 })
@@ -93,52 +133,14 @@ public class InsightGenerator {
             log.debug("Feed empty — not cached (LLM unavailable or disabled): userId={}, period={}, at={}, types={}",
                     userId, period, at, InsightType.cacheSuffix(types));
         }
-        log.debug("Insights generated: userId={}, period={}, at={}, types={}, cards={}, durationMs={}",
-                userId, period, at, InsightType.cacheSuffix(types), cards.size(), System.currentTimeMillis() - start);
-        return cards;
+        long failed = cards.stream().filter(card -> card.retryAfterSeconds() != null).count();
+        log.info("Insight generation finished: userId={}, period={}, at={}, types={}, cards={}, failed={}, cached={}, durationMs={}",
+                userId, period, at, InsightType.cacheSuffix(types), cards.size(), failed,
+                !cards.isEmpty(), System.currentTimeMillis() - start);
     }
 
-    public Flux<InsightCardResponse> feedStream(UUID userId, ReportPeriod period, LocalDate at,
-                                                 boolean llmEnabled, Set<InsightType> types) {
-        return feedStream(userId, period, at, llmEnabled, types, false);
-    }
-
-    public Flux<InsightCardResponse> feedStream(UUID userId, ReportPeriod period, LocalDate at,
-                                                 boolean llmEnabled, Set<InsightType> types, boolean force) {
-        long start = System.currentTimeMillis();
-        if (!force) {
-            List<InsightCardResponse> cached = cache.get(userId, period, at, types);
-            if (cached != null) {
-                log.debug("Insights cache hit (stream): userId={}, period={}, at={}, types={}, cards={}",
-                        userId, period, at, InsightType.cacheSuffix(types), cached.size());
-                return Flux.fromIterable(cached);
-            }
-        }
-        List<InsightFact> facts = reportService.buildFacts(userId, period, at).stream()
-                .filter(fact -> types.contains(fact.type()))
-                .sorted(byImpact())
-                .limit(FEED_SIZE)
-                .toList();
-        return Flux.fromIterable(facts)
-                .concatMap(fact -> {
-                    InsightTextResponse text = generate(llmEnabled, fact);
-                    if (text == null) return Flux.empty();
-                    InsightCardResponse card = buildCard(fact, text);
-                    return Flux.just(card);
-                })
-                .collectList()
-                .doOnNext(cards -> {
-                    if (!cards.isEmpty()) {
-                        cache.put(userId, period, at, types, cards);
-                    } else {
-                        log.debug("Feed stream empty — not cached: userId={}, period={}, at={}, types={}",
-                                userId, period, at, InsightType.cacheSuffix(types));
-                    }
-                    log.debug("Insights streamed: userId={}, period={}, at={}, types={}, cards={}, durationMs={}",
-                            userId, period, at, InsightType.cacheSuffix(types), cards.size(),
-                            System.currentTimeMillis() - start);
-                })
-                .flatMapIterable(cards -> cards);
+    private String generationKey(UUID userId, ReportPeriod period, LocalDate at, Set<InsightType> types) {
+        return userId + ":" + period + ":" + at + ":" + InsightType.cacheSuffix(types);
     }
 
     public boolean isLlmAvailable() {
@@ -170,7 +172,10 @@ public class InsightGenerator {
         // miss, not a model failure.
         metrics.generationRetried();
         log.warn("Card text rejected ({}), re-prompting: fact={}", rejection.get(), fact.id());
-        InsightTextResponse corrected = await(textWriter.writeCorrected(fact, rejection.get().correctiveHint()));
+        String correctiveHint = rejection.get() == CardRejectionReason.LENGTH_EXCEEDED
+                ? "length check failed: " + validator.lengthViolations(attempt, fact)
+                : rejection.get().correctiveHint();
+        InsightTextResponse corrected = await(textWriter.writeCorrected(fact, correctiveHint));
         if (corrected != null && validator.validate(corrected, fact).isEmpty()) {
             metrics.generationValid();
             log.debug("LLM card text accepted after re-prompt: fact={}, durationMs={}",
@@ -191,7 +196,8 @@ public class InsightGenerator {
                 renderTokens(fact, text),
                 failed ? null : fact.value(),
                 failed ? null : fact.changePercent(),
-                null);
+                null,
+                failed ? InsightFeedCache.FAILED_CARD_TTL_SECONDS : null);
     }
 
     private InsightTextResponse renderTokens(InsightFact fact, InsightTextResponse text) {
