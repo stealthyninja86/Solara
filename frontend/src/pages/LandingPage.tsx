@@ -3,6 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { ThemeToggle } from "../components/ui/ThemeToggle";
 import { Icon } from "../components/ui/Icon";
 import { ParticleNetwork } from "../components/ui/ParticleNetwork";
+import aiCategorizationImage from "../../images/ai_categorization.png";
+import safeToSpendImage from "../../images/safe_to_spend.png";
+import interactiveReportsImage from "../../images/interactive_reports.png";
+import aiInsightImage from "../../images/ai_insight.png";
+import smartImportImage from "../../images/smart_import.png";
+import budgetTrackingImage from "../../images/budget_tracking.png";
 
 function Reveal({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -33,19 +39,49 @@ function Reveal({ children, className = "", delay = 0 }: { children: React.React
 }
 
 function smoothScrollTo(targetY: number, duration = 4500) {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    window.scrollTo(0, targetY);
+    return;
+  }
+
   const startY = window.scrollY;
   const distance = targetY - startY;
   const startTime = performance.now();
+  let frame = 0;
+  let cancelled = false;
+
   function easeInOutCubic(t: number) {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   }
+
+  function cancel() {
+    cancelled = true;
+    cancelAnimationFrame(frame);
+    cleanup();
+  }
+
+  function cleanup() {
+    window.removeEventListener("wheel", cancel);
+    window.removeEventListener("touchstart", cancel);
+    window.removeEventListener("keydown", cancel);
+  }
+
   function step(now: number) {
+    if (cancelled) return;
     const elapsed = now - startTime;
     const progress = Math.min(elapsed / duration, 1);
     window.scrollTo(0, startY + distance * easeInOutCubic(progress));
-    if (progress < 1) requestAnimationFrame(step);
+    if (progress < 1) {
+      frame = requestAnimationFrame(step);
+    } else {
+      cleanup();
+    }
   }
-  requestAnimationFrame(step);
+
+  window.addEventListener("wheel", cancel, { passive: true });
+  window.addEventListener("touchstart", cancel, { passive: true });
+  window.addEventListener("keydown", cancel);
+  frame = requestAnimationFrame(step);
 }
 
 function handleAnchorClick(event: React.MouseEvent<HTMLAnchorElement>) {
@@ -103,7 +139,7 @@ export function LandingPage() {
         <div className="landing-hero-inner">
           <div className="motion-safe:animate-[fade-in_0.6s_ease-out_both]" style={{ animationDelay: "0ms" }}>
             <div className="motion-safe:animate-[float_3s_ease-in-out_infinite] mb-8 flex justify-center">
-              <div className="motion-safe:animate-[spin-slow_8s_linear_infinite] text-6xl sm:text-7xl">{"\u2600\uFE0F"}</div>
+              <div className="text-6xl sm:text-7xl">{"\u2600\uFE0F"}</div>
             </div>
           </div>
 
@@ -182,50 +218,9 @@ export function LandingPage() {
             </h2>
           </Reveal>
 
-          <div className="landing-feature-grid">
-            <Reveal delay={0}>
-              <FeatureCard
-                icon="categorize-transaction"
-                title="AI Categorization"
-                description="Every transaction automatically sorted. Solara uses a local LLM that learns from your history — nothing leaves your machine."
-              />
-            </Reveal>
-            <Reveal delay={100}>
-              <FeatureCard
-                icon="safe-to-spend"
-                title="Safe to Spend"
-                description="A single number that tells you what's left this month. Calculated from your budget, income, and actual spending — updated in real time."
-              />
-            </Reveal>
-            <Reveal delay={150}>
-              <FeatureCard
-                icon="spending-trend"
-                title="Interactive Reports"
-                description="Weekly, monthly, and yearly breakdowns with trend charts. Compare periods, track category spending, and spot patterns over time."
-              />
-            </Reveal>
-            <Reveal delay={200}>
-              <FeatureCard
-                icon="solara-insights"
-                title="AI Insights"
-                description="Get personalized observations about your spending habits. Solara highlights anomalies and surfaces trends you might have missed."
-              />
-            </Reveal>
-            <Reveal delay={250}>
-              <FeatureCard
-                icon="import"
-                title="Smart Import"
-                description="Drop in your bank's CSV. Solara auto-detects the format — date, amount, description. No manual column mapping needed."
-              />
-            </Reveal>
-            <Reveal delay={300}>
-              <FeatureCard
-                icon="budget"
-                title="Budget Tracking"
-                description="Set monthly budgets per category. See exactly where you stand with visual progress bars and real-time spent-vs-budget comparisons."
-              />
-            </Reveal>
-          </div>
+          <Reveal delay={100}>
+            <FeatureShowcase />
+          </Reveal>
         </div>
       </section>
 
@@ -377,16 +372,89 @@ function ProblemCard({ icon, title, description, delay }: { icon: string; title:
   );
 }
 
-function FeatureCard({ icon, title, description }: { icon: string; title: string; description: string }) {
+const FEATURES = [
+  {
+    icon: "categorize-transaction",
+    title: "AI Categorization",
+    description: "Every transaction automatically sorted. Solara uses a local LLM that learns from your history — nothing leaves your machine.",
+    image: aiCategorizationImage,
+  },
+  {
+    icon: "safe-to-spend",
+    title: "Safe to Spend",
+    description: "A single number that tells you what's left this month. Calculated from your budget, income, and actual spending — updated in real time.",
+    image: safeToSpendImage,
+  },
+  {
+    icon: "spending-trend",
+    title: "Interactive Reports",
+    description: "Weekly, monthly, and yearly breakdowns with trend charts. Compare periods, track category spending, and spot patterns over time.",
+    image: interactiveReportsImage,
+  },
+  {
+    icon: "solara-insights",
+    title: "AI Insights",
+    description: "Get personalized observations about your spending habits. Solara highlights anomalies and surfaces trends you might have missed.",
+    image: aiInsightImage,
+  },
+  {
+    icon: "import",
+    title: "Smart Import",
+    description: "Flexible by design — add a single transaction on the fly, or drop your bank statement as a CSV. Solara auto-detects the format — no manual column mapping needed.",
+    image: smartImportImage,
+  },
+  {
+    icon: "budget",
+    title: "Budget Tracking",
+    description: "Set monthly budgets per category. See exactly where you stand with visual progress bars and real-time spent-vs-budget comparisons.",
+    image: budgetTrackingImage,
+  },
+];
+
+function FeatureShowcase() {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeFeature = FEATURES[activeIndex]!;
+
+  function handleTabKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+    event.preventDefault();
+    const direction = event.key === "ArrowRight" ? 1 : -1;
+    const nextIndex = (index + direction + FEATURES.length) % FEATURES.length;
+    setActiveIndex(nextIndex);
+    document.getElementById(`showcase-tab-${nextIndex}`)?.focus();
+  }
+
   return (
-    <div className="landing-feature-card">
-      <div className="landing-feature-icon">
-        <Icon name={icon} size={20} />
+    <div className="landing-showcase">
+      <div className="landing-showcase-tabs" role="tablist" aria-label="Solara features">
+        {FEATURES.map((feature, index) => (
+          <button
+            key={feature.title}
+            id={`showcase-tab-${index}`}
+            role="tab"
+            aria-selected={activeIndex === index}
+            aria-controls="showcase-panel"
+            tabIndex={activeIndex === index ? 0 : -1}
+            className={`landing-showcase-tab${activeIndex === index ? " landing-showcase-tab--active" : ""}`}
+            onClick={() => setActiveIndex(index)}
+            onKeyDown={(event) => handleTabKeyDown(event, index)}
+          >
+            <Icon name={feature.icon} size={14} />
+            <span>{feature.title}</span>
+          </button>
+        ))}
       </div>
-      <h3 className="mb-2 text-[0.9rem] font-semibold">{title}</h3>
-      <p className="text-[0.8rem] leading-relaxed" style={{ color: "var(--color-text-muted)" }}>
-        {description}
-      </p>
+
+      <div className="landing-showcase-panel" id="showcase-panel" role="tabpanel" aria-labelledby={`showcase-tab-${activeIndex}`}>
+        <img src={activeFeature.image} alt={activeFeature.title} loading="lazy" />
+      </div>
+
+      <div className="landing-showcase-caption">
+        <h3 className="mb-1.5 text-base font-semibold">{activeFeature.title}</h3>
+        <p className="text-sm leading-relaxed" style={{ color: "var(--color-text-muted)" }}>
+          {activeFeature.description}
+        </p>
+      </div>
     </div>
   );
 }

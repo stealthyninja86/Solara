@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useReports } from "../hooks/useReports";
 import { useAvailableDates } from "../hooks/useAvailableDates";
-import { usePullToRefresh } from "../hooks/usePullToRefresh";
+// import { usePullToRefresh } from "../hooks/usePullToRefresh"; // temporarily disabled
 import { FinancialSnapshot } from "../components/cards/FinancialSnapshot";
 import { SpendingBehaviour } from "../components/charts/SpendingBehaviour";
 import { TrendChart } from "../components/charts/TrendChart";
@@ -40,11 +40,12 @@ export function Reports() {
     if (!reports.loading) setPullRefreshing(false);
   }, [reports.loading]);
 
-  const handleRefresh = useCallback(() => {
-    window.location.reload();
-  }, []);
+  // Pull-to-refresh temporarily disabled (see usePullToRefresh).
+  // const handleRefresh = useCallback(() => {
+  //   window.location.reload();
+  // }, []);
 
-  const { pullRef } = usePullToRefresh(handleRefresh, setPullRefreshing);
+  // const { pullRef } = usePullToRefresh(handleRefresh, setPullRefreshing);
 
   function persist(next: { year: number; month: number }) {
     setSelected(next);
@@ -61,7 +62,7 @@ export function Reports() {
   }
 
   return (
-    <div ref={pullRef} className="flex w-full flex-col gap-6">
+    <div className="flex w-full flex-col gap-6">
       {pullRefreshing && (
         <div className="flex justify-center py-2">
           <div className="spinner spinner--light" />
@@ -102,7 +103,11 @@ export function Reports() {
       </div>
       )}
 
-      <Recommendations month={selected.month - 1} year={selected.year} />
+      <Recommendations
+        month={selected.month - 1}
+        year={selected.year}
+        hasEnoughData={reports.summary.monthly.income > 0 || reports.summary.monthly.expenses > 0}
+      />
       <FinancialSnapshot data={reports.summary} ranges={reports.ranges} />
       <SpendingBehaviour data={reports.spendingChanges} ranges={reports.ranges} />
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

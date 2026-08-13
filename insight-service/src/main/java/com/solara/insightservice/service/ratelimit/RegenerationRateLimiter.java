@@ -57,6 +57,21 @@ public class RegenerationRateLimiter {
         }
     }
 
+    /** Read-only usage count — powers the frontend "X of Y left today" counter. */
+    public long used(UUID userId) {
+        try {
+            String value = redis.opsForValue().get(key(userId));
+            return value == null ? 0 : Long.parseLong(value);
+        } catch (Exception e) {
+            log.warn("Regeneration status read failed: {}", e.getMessage());
+            return 0;
+        }
+    }
+
+    public long limit() {
+        return bucketCapacity;
+    }
+
     private String key(UUID userId) {
         return "insight:regen:" + userId;
     }

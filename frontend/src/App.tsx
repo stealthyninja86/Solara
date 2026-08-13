@@ -1,32 +1,46 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
 import { ThemeProvider } from "./context/ThemeProvider";
-import { LandingPage } from "./pages/LandingPage";
-import { LoginPage } from "./pages/LoginPage";
-import { Dashboard } from "./pages/Dashboard";
-import { DashboardOverview } from "./pages/DashboardOverview";
-import { DashboardLayout } from "./components/layout/DashboardLayout";
-import { Reports as DashboardReports } from "./pages/Reports";
-import { DashboardSettings } from "./pages/DashboardSettings";
+
+const LandingPage = lazy(() =>
+  import("./pages/LandingPage").then((m) => ({ default: m.LandingPage })),
+);
+const LoginPage = lazy(() =>
+  import("./pages/LoginPage").then((m) => ({ default: m.LoginPage })),
+);
+const DashboardOverview = lazy(() =>
+  import("./pages/DashboardOverview").then((m) => ({ default: m.DashboardOverview })),
+);
+const DashboardLayout = lazy(() =>
+  import("./components/layout/DashboardLayout").then((m) => ({ default: m.DashboardLayout })),
+);
+const Reports = lazy(() => import("./pages/Reports").then((m) => ({ default: m.Reports })));
+const DashboardSettings = lazy(() =>
+  import("./pages/DashboardSettings").then((m) => ({ default: m.DashboardSettings })),
+);
+
+function Loader() {
+  return (
+    <div
+      style={{
+        width: "100%",
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div className="spinner spinner--light" />
+    </div>
+  );
+}
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
 
   if (auth.isLoading) {
-    return (
-      <div
-        style={{
-          width: "100%",
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <div className="spinner spinner--light" />
-      </div>
-    );
+    return <Loader />;
   }
 
   if (!auth.isAuthenticated) {
@@ -41,23 +55,12 @@ function AppLayout() {
   const [authError, setAuthError] = useState<string | null>(null);
 
   if (auth.isLoading) {
-    return (
-      <div
-        style={{
-          width: "100%",
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <div className="spinner spinner--light" />
-      </div>
-    );
+    return <Loader />;
   }
 
   return (
-    <Routes>
+    <Suspense fallback={<Loader />}>
+      <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route
         path="/login"
@@ -99,12 +102,12 @@ function AppLayout() {
         }
       >
         <Route index element={<DashboardOverview />} />
-        <Route path="preview" element={<Dashboard />} />
-        <Route path="reports" element={<DashboardReports />} />
+        <Route path="reports" element={<Reports />} />
         <Route path="settings" element={<DashboardSettings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      </Routes>
+    </Suspense>
   );
 }
 

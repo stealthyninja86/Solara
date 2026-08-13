@@ -9,6 +9,8 @@ interface Props {
 
 export function DashboardHeader({ sidebarOpen, onToggleSidebar }: Props) {
   const auth = useAuth();
+  const displayName = [auth.firstName, auth.lastName].filter(Boolean).join(" ") || auth.email?.split("@")[0] || "";
+  const displayInitial = (displayName || auth.email || "").charAt(0).toUpperCase();
 
   return (
     <header className="mb-0! flex h-[44px] shrink-0 items-center justify-between px-4 pb-0!">
@@ -32,10 +34,10 @@ export function DashboardHeader({ sidebarOpen, onToggleSidebar }: Props) {
         <ThemeToggle />
         <div className="flex items-center gap-1.5 rounded-md px-2 py-1">
           <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--color-bg-hover)] text-tiny font-medium text-[var(--color-text)]">
-            {auth.email?.charAt(0).toUpperCase()}
+            {displayInitial}
           </div>
           <span className="hidden text-caption text-[var(--color-text)] sm:inline">
-            {auth.email?.split("@")[0]}
+            {displayName}
           </span>
         </div>
       </div>

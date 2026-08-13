@@ -27,7 +27,9 @@ public class InsightServiceConfig {
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
-        log.info("Kafka listener container factory initialized with AckMode={}", ContainerProperties.AckMode.MANUAL);
+        factory.getContainerProperties().setObservationEnabled(true);
+        log.info("Kafka listener container factory initialized with AckMode={}, observationEnabled={}",
+                ContainerProperties.AckMode.MANUAL, true);
         return factory;
     }
 

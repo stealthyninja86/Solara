@@ -1,18 +1,24 @@
 import { useState } from "react";
-import { useIncome } from "../../hooks/useIncome";
+import { DEFAULT_USER_ID } from "../../constants";
+import { api } from "../../utils/api";
+import { getUserId } from "../../hooks/useAuth";
 import { HowItWorks, type HowItWorksItem } from "../ui/HowItWorks";
 import { Icon } from "../ui/Icon";
 
 interface Props {
-  refreshKey?: number;
+  monthlyIncome: number;
+  hasIncome: boolean;
   totalSpend?: number;
   month?: number;
   year?: number;
+  onSaved?: () => void;
 }
 
-export function IncomeCard({ refreshKey = 0, totalSpend = 0, month, year }: Props) {
-  const { monthlyIncome, hasIncome, setMonthlyIncome } = useIncome(refreshKey, month, year);
+function toIsoDate(year: number, month: number): string {
+  return `${year}-${String(month + 1).padStart(2, "0")}-01`;
+}
 
+export function IncomeCard({ monthlyIncome, hasIncome, totalSpend = 0, month, year, onSaved }: Props) {
   const [showInput, setShowInput] = useState(false);
   const [inputValue, setInputValue] = useState(String(monthlyIncome || ""));
   const [saving, setSaving] = useState(false);
@@ -23,13 +29,32 @@ export function IncomeCard({ refreshKey = 0, totalSpend = 0, month, year }: Prop
     if (isNaN(val) || val <= 0) return;
     setSaving(true);
     setSaveError(false);
-    const ok = await setMonthlyIncome(val);
-    setSaving(false);
-    if (ok) {
-      setShowInput(false);
-    } else {
+    const now = new Date();
+    const m = month ?? now.getMonth();
+    const y = year ?? now.getFullYear();
+    const at = toIsoDate(y, m);
+    const params = new URLSearchParams({
+      userId: getUserId() ?? DEFAULT_USER_ID,
+      at,
+    });
+    try {
+      const res = await api(`/api/v1/insights/income?${params}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ income: val }),
+      });
+      if (res.ok) {
+        setShowInput(false);
+        onSaved?.();
+      } else {
+        setSaveError(true);
+        setTimeout(() => setSaveError(false), 3000);
+      }
+    } catch {
       setSaveError(true);
       setTimeout(() => setSaveError(false), 3000);
+    } finally {
+      setSaving(false);
     }
   }
 

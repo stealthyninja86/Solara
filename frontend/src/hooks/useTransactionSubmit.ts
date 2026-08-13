@@ -277,9 +277,9 @@ export function useTransactionSubmit() {
     }
   }
 
-  function dismissSuccessModal(refresh: (page: number) => Promise<void>) {
+  function dismissSuccessModal(refresh?: (page: number) => Promise<void>) {
     setShowSuccessModal(false);
-    refresh(0);
+    refresh?.(0);
   }
 
   function dismissQuickReview() {

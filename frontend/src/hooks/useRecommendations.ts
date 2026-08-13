@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Recommendation, TimePeriod } from "../types/reports";
 import { DEFAULT_USER_ID } from "../constants";
 import { api } from "../utils/api";
@@ -12,6 +12,7 @@ interface BackendCard {
   value: string;
   changePercent: string | null;
   action: string | null;
+  retryAfterSeconds: number | null;
 }
 
 interface BackendRecommendation {
@@ -38,6 +39,7 @@ function toRecommendation(data: BackendRecommendation): Recommendation {
       value: data.card.value,
       changePercent: data.card.changePercent,
       action: data.card.action,
+      retryAfterSeconds: data.card.retryAfterSeconds,
     },
   };
 }
@@ -47,14 +49,26 @@ function toRecommendation(data: BackendRecommendation): Recommendation {
  * Single fetch — the LLM is expensive, so we only request what's needed.
  * Backed by GET /api/v1/insights/recommendations — the advisor-voiced ACTION
  * cards, generated separately from (and never overlapping) the Overview feed.
+ *
+ * When pollWhenEmpty is true and the feed comes back empty (AI generation
+ * runs in the background), the hook polls the same endpoint every 3s until
+ * cards appear or the 90s deadline passes.
  */
-export function useRecommendations(month: number, year: number, period: TimePeriod, refreshKey: number = 0) {
+export function useRecommendations(month: number, year: number, period: TimePeriod, refreshKey: number = 0, pollWhenEmpty = false) {
   const day = new Date().getDate();
   const [loading, setLoading] = useState(false);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [error, setError] = useState("");
+  const [regenerating, setRegenerating] = useState(false);
+  const pollTimerRef = useRef<number | null>(null);
+  const pollAttemptsRef = useRef(0);
+  const loadedPeriodRef = useRef<string | null>(null);
 
   async function load(force = false) {
+    if (pollTimerRef.current !== null) {
+      window.clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
     setLoading(true);
     setError("");
     const userId = getUserId() ?? DEFAULT_USER_ID;
@@ -77,18 +91,52 @@ export function useRecommendations(month: number, year: number, period: TimePeri
         return;
       }
       const data = (await res.json()) as BackendRecommendation[];
-      setRecommendations(data.map(toRecommendation));
+      const currentKey = `${year}-${month}-${period}`;
+      setRecommendations((prev) => {
+        if (data.length === 0 && prev.length > 0 && loadedPeriodRef.current === currentKey) {
+          return prev;
+        }
+        loadedPeriodRef.current = currentKey;
+        return data.map(toRecommendation);
+      });
+      if (data.length === 0 && pollWhenEmpty) {
+        setRegenerating(true);
+        schedulePoll();
+      } else {
+        setRegenerating(false);
+        pollAttemptsRef.current = 0;
+      }
     } catch {
-      setError("Failed to load recommendations.");
+      if (pollWhenEmpty) {
+        schedulePoll();
+      } else {
+        setError("Failed to load recommendations.");
+      }
     } finally {
       setLoading(false);
     }
   }
 
+  function schedulePoll() {
+    if (pollAttemptsRef.current < 30) {
+      pollAttemptsRef.current += 1;
+      pollTimerRef.current = window.setTimeout(() => {
+        void load();
+      }, 3000);
+    } else {
+      setRegenerating(false);
+    }
+  }
+
   useEffect(() => {
     load();
+    return () => {
+      if (pollTimerRef.current !== null) {
+        window.clearTimeout(pollTimerRef.current);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month, year, period, refreshKey]);
+  }, [month, year, period, refreshKey, pollWhenEmpty]);
 
-  return { recommendations, loading, error, regenerate: () => load(true) };
+  return { recommendations, loading, error, regenerating, regenerate: () => load(true) };
 }

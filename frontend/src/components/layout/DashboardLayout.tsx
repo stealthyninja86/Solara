@@ -29,6 +29,10 @@ export function DashboardLayout() {
 
   return (
     <div className="fixed inset-0 bg-[var(--color-bg)]">
+      {/* Ambient background (wash + grid) */}
+      <div className="dashboard-wash" aria-hidden="true" />
+      <div className="dashboard-grid" aria-hidden="true" />
+
       {/* Mobile backdrop */}
       {!isDesktop && (
         <div

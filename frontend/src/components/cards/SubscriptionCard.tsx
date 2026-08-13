@@ -1,5 +1,5 @@
 import type { TrackedSubscription, SubscriptionFrequency, SubscriptionKind } from "../../types/reports";
-import { annualCost } from "../../hooks/useSubscriptions";
+import { annualCost } from "../../hooks/useDashboard";
 import { HowItWorks, type HowItWorksItem } from "../ui/HowItWorks";
 import { Icon } from "../ui/Icon";
 
