@@ -125,6 +125,25 @@ resilience4j:
         permittedNumberOfCallsInHalfOpenState: 5
         minimumNumberOfCalls: 10
 
+  # The Spring Cloud Gateway CircuitBreaker filter wraps every call in a
+  # TimeLimiter. Its default timeout is 1s (io.github.resilience4j TimeLimiterConfig#ofDefaults),
+  # which silently overrides the routes' intended response-timeout metadata and kills
+  # any slower call (LLM insight generation, cold-started aggregation queries) as a
+  # failure, tripping the breaker. Per-instance timeouts trade structured below:
+  # fast services (auth/transaction) keep tight limits so their breakers trip
+  # promptly on genuine hangs; insight gets a long window for LLM + heavy reads.
+  timelimiter:
+    instances:
+      authServiceCB:
+        timeout-duration: 5s
+        cancel-running-future: true
+      transactionServiceCB:
+        timeout-duration: 15s
+        cancel-running-future: true
+      insightServiceCB:
+        timeout-duration: 60s
+        cancel-running-future: true
+
 management:
   endpoints:
     web:
