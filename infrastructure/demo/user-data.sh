@@ -184,5 +184,10 @@ systemctl enable solara-stack.service
 # --- 9. ssh user (make deploy / make ssh) can use docker + write the repo ---
 usermod -aG docker ec2-user
 chown -R ec2-user:ec2-user /srv/solara
+# auth-service-db is a HOST BIND MOUNT that the postgres image (uid 999) must own:
+# the recursive chown above strands the data dir (seen live 2026-08-15 —
+# "could not open file global/pg_filenode.map: Permission denied", auth-service
+# crashes at Flyway connect). Re-assert postgres ownership AFTER the recursive chown.
+chown -R 999:999 /srv/solara/auth-service/auth-service-db
 
 echo "Solara bootstrap complete: $(date -u +%FT%TZ)"
