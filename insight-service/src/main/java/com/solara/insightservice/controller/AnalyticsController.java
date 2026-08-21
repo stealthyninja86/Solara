@@ -8,11 +8,12 @@ import com.solara.insightservice.dto.response.RegenerationStatusResponse;
 import com.solara.insightservice.dto.response.SafeToSpendResponse;
 import com.solara.insightservice.dto.response.SolaraInsightResponse;
 import com.solara.insightservice.dto.response.TrendsResponse;
+import com.solara.insightservice.exception.AiInsightsDisabledException;
 import com.solara.insightservice.model.ReportPeriod;
 import com.solara.insightservice.model.TransactionCategory;
 import com.solara.insightservice.service.insight.InsightGenerator;
+import com.solara.insightservice.service.insight.InsightSurfaceService;
 import com.solara.insightservice.service.finance.FinanceQueryService;
-import com.solara.insightservice.service.insight.surface.OverviewService;
 import com.solara.insightservice.service.ratelimit.RegenerationRateLimiter;
 import com.solara.insightservice.service.report.ReportService;
 import org.slf4j.Logger;
@@ -37,18 +38,18 @@ public class AnalyticsController {
 
     private final FinanceQueryService queryService;
     private final ReportService reportService;
-    private final OverviewService overviewService;
+    private final InsightSurfaceService insightSurfaceService;
     private final InsightGenerator insightGenerator;
     private final RegenerationRateLimiter regenerationRateLimiter;
 
     private static final Logger log = LoggerFactory.getLogger(AnalyticsController.class);
 
     public AnalyticsController(FinanceQueryService queryService, ReportService reportService,
-                               OverviewService overviewService, InsightGenerator insightGenerator,
+                               InsightSurfaceService insightSurfaceService, InsightGenerator insightGenerator,
                                RegenerationRateLimiter regenerationRateLimiter) {
         this.queryService = queryService;
         this.reportService = reportService;
-        this.overviewService = overviewService;
+        this.insightSurfaceService = insightSurfaceService;
         this.insightGenerator = insightGenerator;
         this.regenerationRateLimiter = regenerationRateLimiter;
     }
@@ -123,10 +124,14 @@ public class AnalyticsController {
             @RequestParam ReportPeriod period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate at,
             @RequestParam(defaultValue = "false") boolean refresh) {
+        if (!insightSurfaceService.isLlmEnabled(userId)) {
+            log.info("overview rejected: userId={}, llmEnabled=false", userId);
+            throw new AiInsightsDisabledException();
+        }
         if (refresh) {
             regenerationRateLimiter.consume(userId);
         }
-        return ResponseEntity.ok(overviewService.overview(userId, period, at, refresh));
+        return ResponseEntity.ok(insightSurfaceService.overview(userId, period, at, refresh));
     }
 
     @GetMapping("/available-dates")

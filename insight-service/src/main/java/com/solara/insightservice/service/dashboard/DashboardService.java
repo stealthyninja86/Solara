@@ -7,10 +7,11 @@ import com.solara.insightservice.dto.response.DashboardSection;
 import com.solara.insightservice.dto.response.IncomeResponse;
 import com.solara.insightservice.dto.response.SafeToSpendResponse;
 import com.solara.insightservice.dto.response.TrendsResponse;
+import com.solara.insightservice.exception.AiInsightsDisabledException;
 import com.solara.insightservice.model.ReportPeriod;
 import com.solara.insightservice.service.finance.FinanceQueryService;
 import com.solara.insightservice.service.finance.SubscriptionService;
-import com.solara.insightservice.service.insight.surface.OverviewService;
+import com.solara.insightservice.service.insight.InsightSurfaceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -38,14 +40,14 @@ public class DashboardService {
 
     private final FinanceQueryService queryService;
     private final SubscriptionService subscriptionService;
-    private final OverviewService overviewService;
+    private final InsightSurfaceService insightSurfaceService;
     private final Executor sectionExecutor;
 
     public DashboardService(FinanceQueryService queryService, SubscriptionService subscriptionService,
-                            OverviewService overviewService) {
+                            InsightSurfaceService insightSurfaceService) {
         this.queryService = queryService;
         this.subscriptionService = subscriptionService;
-        this.overviewService = overviewService;
+        this.insightSurfaceService = insightSurfaceService;
         this.sectionExecutor = TracedExecutors.decorated(Executors.newThreadPerTaskExecutor(
                 Thread.ofVirtual().name("dashboard-", 0).factory()));
     }
@@ -78,7 +80,7 @@ public class DashboardService {
         sections.put("subscriptions", run("subscriptions",
                 () -> subscriptionService.listTracked(userId), NUMERIC_SECTION_TIMEOUT_MILLIS));
         sections.put("overview", run("overview",
-                () -> overviewService.overview(userId, period, anchor, false), AI_SECTION_TIMEOUT_MILLIS));
+                () -> insightSurfaceService.overview(userId, period, anchor, false), AI_SECTION_TIMEOUT_MILLIS));
 
         log.debug("dashboard aggregated: userId={}, period={}, at={}, okSections={}/{}",
                 userId, period, anchor, okCount(sections), sections.size());
@@ -92,10 +94,17 @@ public class DashboardService {
                     if (error == null) {
                         return DashboardSection.ok(result);
                     }
-                    if (error instanceof TimeoutException timeout) {
+                    Throwable root = error instanceof CompletionException completion
+                            ? completion.getCause() != null ? completion.getCause() : completion
+                            : error;
+                    if (root instanceof TimeoutException timeout) {
                         log.warn("Dashboard section timed out: section={}, timeoutMillis={}", sectionName, timeoutMillis);
                         return DashboardSection.unavailable("TIMEOUT",
                                 "Section took longer than " + timeoutMillis / 1000 + " seconds", true);
+                    }
+                    if (root instanceof AiInsightsDisabledException aiDisabled) {
+                        log.info("Dashboard section unavailable: section={}, code=AI_DISABLED", sectionName);
+                        return DashboardSection.unavailable("AI_DISABLED", aiDisabled.getMessage(), false);
                     }
                     log.error("Dashboard section failed: section={}", sectionName, error);
                     return DashboardSection.unavailable("INTERNAL", "Section failed to load", false);

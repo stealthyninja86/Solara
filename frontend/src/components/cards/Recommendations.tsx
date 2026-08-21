@@ -19,15 +19,15 @@ interface Props {
 }
 
 const TYPE_DOTS: Record<string, { color: string; pulseClass: string; title: string }> = {
-  ACTION: { color: "var(--color-warn)", pulseClass: "animate-ping-slow", title: "Action" },
-  NEXT: { color: "var(--color-warn)", pulseClass: "animate-ping-slow", title: "Next" },
-  STATUS: { color: "var(--color-ok)", pulseClass: "animate-ping-slow", title: "Status" },
+  ACTION: { color: "var(--color-warn)", pulseClass: "animate-radar-slow", title: "Action" },
+  NEXT: { color: "var(--color-warn)", pulseClass: "animate-radar-slow", title: "Next" },
+  STATUS: { color: "var(--color-ok)", pulseClass: "animate-radar-slow", title: "Status" },
 };
 
 const ACTION_DOTS: Record<string, { color: string; pulseClass: string; title: string }> = {
-  cut_spending: { color: "var(--color-bad)", pulseClass: "animate-ping", title: "Cut spending" },
-  set_budget: { color: "var(--color-warn)", pulseClass: "animate-ping-slow", title: "Set budget" },
-  review_budget: { color: "var(--color-warn)", pulseClass: "animate-ping-slow", title: "Review budget" },
+  cut_spending: { color: "var(--color-bad)", pulseClass: "animate-radar", title: "Cut spending" },
+  set_budget: { color: "var(--color-warn)", pulseClass: "animate-radar-slow", title: "Set budget" },
+  review_budget: { color: "var(--color-warn)", pulseClass: "animate-radar-slow", title: "Review budget" },
   categorize_transactions: { color: "var(--color-text-muted)", pulseClass: "", title: "Categorize transactions" },
 };
 
