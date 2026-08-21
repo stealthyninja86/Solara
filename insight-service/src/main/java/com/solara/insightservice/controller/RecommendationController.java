@@ -3,7 +3,7 @@ package com.solara.insightservice.controller;
 import com.solara.insightservice.dto.response.RecommendationResponse;
 import com.solara.insightservice.exception.AiInsightsDisabledException;
 import com.solara.insightservice.model.ReportPeriod;
-import com.solara.insightservice.service.insight.InsightSurfaceService;
+import com.solara.insightservice.service.insight.InsightFacade;
 import com.solara.insightservice.service.ratelimit.RegenerationRateLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,12 +24,12 @@ public class RecommendationController {
 
     private static final Logger log = LoggerFactory.getLogger(RecommendationController.class);
 
-    private final InsightSurfaceService insightSurfaceService;
+    private final InsightFacade insightFacade;
     private final RegenerationRateLimiter regenerationRateLimiter;
 
-    public RecommendationController(InsightSurfaceService insightSurfaceService,
+    public RecommendationController(InsightFacade insightFacade,
                                     RegenerationRateLimiter regenerationRateLimiter) {
-        this.insightSurfaceService = insightSurfaceService;
+        this.insightFacade = insightFacade;
         this.regenerationRateLimiter = regenerationRateLimiter;
     }
 
@@ -39,13 +39,13 @@ public class RecommendationController {
             @RequestParam ReportPeriod period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate at,
             @RequestParam(defaultValue = "false") boolean refresh) {
-        if (!insightSurfaceService.isLlmEnabled(userId)) {
+        if (!insightFacade.isLlmEnabled(userId)) {
             log.info("recommendations rejected: userId={}, llmEnabled=false", userId);
             throw new AiInsightsDisabledException();
         }
         if (refresh) {
             regenerationRateLimiter.consume(userId);
         }
-        return ResponseEntity.ok(insightSurfaceService.recommendations(userId, period, at, refresh));
+        return ResponseEntity.ok(insightFacade.recommendations(userId, period, at, refresh));
     }
 }

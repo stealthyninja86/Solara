@@ -220,8 +220,10 @@ public class InsightGenerator {
         return Comparator.comparingInt(fact -> {
             if (fact.type() == InsightType.ACTION && fact.id().startsWith("over_")) return 0;
             if (fact.type() == InsightType.ACTION) return 1;
-            if (fact.type() == InsightType.NEXT) return 2;
-            return 3;                                                   // STATUS
+            if ("budget_status".equals(fact.id())) return 2;
+            if ("upcoming_recurring".equals(fact.id())) return 3;
+            if (fact.type() == InsightType.NEXT) return 4;
+            return 5;                                                   // other STATUS
         });
     }
 }

@@ -11,7 +11,7 @@ import com.solara.insightservice.exception.AiInsightsDisabledException;
 import com.solara.insightservice.model.ReportPeriod;
 import com.solara.insightservice.service.finance.FinanceQueryService;
 import com.solara.insightservice.service.finance.SubscriptionService;
-import com.solara.insightservice.service.insight.InsightSurfaceService;
+import com.solara.insightservice.service.insight.InsightFacade;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -40,14 +40,14 @@ public class DashboardService {
 
     private final FinanceQueryService queryService;
     private final SubscriptionService subscriptionService;
-    private final InsightSurfaceService insightSurfaceService;
+    private final InsightFacade insightFacade;
     private final Executor sectionExecutor;
 
     public DashboardService(FinanceQueryService queryService, SubscriptionService subscriptionService,
-                            InsightSurfaceService insightSurfaceService) {
+                            InsightFacade insightFacade) {
         this.queryService = queryService;
         this.subscriptionService = subscriptionService;
-        this.insightSurfaceService = insightSurfaceService;
+        this.insightFacade = insightFacade;
         this.sectionExecutor = TracedExecutors.decorated(Executors.newThreadPerTaskExecutor(
                 Thread.ofVirtual().name("dashboard-", 0).factory()));
     }
@@ -80,7 +80,7 @@ public class DashboardService {
         sections.put("subscriptions", run("subscriptions",
                 () -> subscriptionService.listTracked(userId), NUMERIC_SECTION_TIMEOUT_MILLIS));
         sections.put("overview", run("overview",
-                () -> insightSurfaceService.overview(userId, period, anchor, false), AI_SECTION_TIMEOUT_MILLIS));
+                () -> insightFacade.overview(userId, period, anchor, false), AI_SECTION_TIMEOUT_MILLIS));
 
         log.debug("dashboard aggregated: userId={}, period={}, at={}, okSections={}/{}",
                 userId, period, anchor, okCount(sections), sections.size());
