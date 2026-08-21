@@ -49,7 +49,7 @@ spring:
                     name: insightServiceCB
                     fallbackUri: forward:/fallback/insight
               metadata:
-                response-timeout: 300000
+                response-timeout: 120000
 
             - id: insight-service-insights
               uri: http://insight-service:4003
@@ -61,7 +61,7 @@ spring:
                     name: insightServiceCB
                     fallbackUri: forward:/fallback/insight
               metadata:
-                response-timeout: 300000
+                response-timeout: 120000
 
           default-filters:
             - name: RequestRateLimiter
@@ -125,16 +125,23 @@ resilience4j:
         permittedNumberOfCallsInHalfOpenState: 5
         minimumNumberOfCalls: 10
 
-  # The CircuitBreaker filter wraps routed calls in an implicit TimeLimiter.
-  # Its default timeout is 1000ms — every LLM-generating insight call (>1s)
-  # was killed at 1s and fell back to /fallback/insight (503). 120s is the
-  # hard cap; the insight routes' response-timeout metadata (300000ms) only
-  # starts counting once the TimeLimiter has given up, so per-request latency
-  # is bounded by the TimeLimiter alone.
+  # The Spring Cloud Gateway CircuitBreaker filter wraps every call in a
+  # TimeLimiter. Its default timeout is 1s (io.github.resilience4j TimeLimiterConfig#ofDefaults),
+  # which silently overrides the routes' intended response-timeout metadata and kills
+  # any slower call (LLM insight generation, cold-started aggregation queries) as a
+  # failure, tripping the breaker. Per-instance timeouts trade structured below:
+  # fast services (auth/transaction) keep tight limits so their breakers trip
+  # promptly on genuine hangs; insight gets a long window for LLM + heavy reads.
   timelimiter:
-    configs:
-      default:
-        timeout-duration: 120s
+    instances:
+      authServiceCB:
+        timeout-duration: 5s
+        cancel-running-future: true
+      transactionServiceCB:
+        timeout-duration: 15s
+        cancel-running-future: true
+      insightServiceCB:
+        timeout-duration: 60s
         cancel-running-future: true
 
 management:
