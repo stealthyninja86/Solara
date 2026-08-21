@@ -1,0 +1,52 @@
+# .github/workflows/deploy.yml
+# Solara CI/CD — PHASE 1 (verify first): build+test on every PR and push to the
+# production branch.
+#
+# The deploy-to-demo story lives in `make deploy` (infrastructure/demo/Makefile):
+# the demo SG opens SSH only to the operator's IP, so GitHub runners cannot reach
+# the host — automated deploy was deliberately dropped (demo_deployment.md §7).
+# The AWS stages (build-image -> migrate -> deploy to ECR/EKS) are the P2 story
+# (aws_deployment_tutorial.md §P) and are NOT active today.
+#
+# This workflow file exists ONLY on the production branch (main intentionally has
+# no workflows — ea91877) and GitHub runs it only for branches it is pushed to,
+# so the filter below must match this file's own branch: production.
+name: Deploy Solara
+
+on:
+  push:
+    branches: [ "production" ]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: build-test (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false                   # one red service must not cancel the other three
+      matrix:
+        service:
+          - api-gateway
+          - auth-service
+          - transaction-service
+          - insight-service
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven                 # ~/.m2 cache across runs — the #1 pipeline speedup
+      - name: Compile + package
+        working-directory: ${{ matrix.service }}
+        # Tests are deferred (JUnit/Mockito/Testcontainers land later). The moment the test
+        # suites land, flip to `./mvnw verify` and delete the skip flag.
+        run: ./mvnw package -Dmaven.test.skip=true
