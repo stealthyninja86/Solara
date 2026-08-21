@@ -1,4 +1,6 @@
 const ACTIVE_IMPORT_KEY = "solara.active-import.v1";
+const ACTIVE_OVERVIEW_KEY = "solara.active-overview.v1";
+const OVERVIEW_TTL_MS = 90 * 1000;
 const ROW_ESTIMATE_MS = 45 * 1000;
 const MIN_IMPORT_TTL_MS = 15 * 60 * 1000;
 const MAX_IMPORT_TTL_MS = 2 * 60 * 60 * 1000;
@@ -55,6 +57,47 @@ export function saveActiveImport(activeImport: ActiveImport) {
 export function clearActiveImport() {
   try {
     localStorage.removeItem(ACTIVE_IMPORT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export interface ActiveOverview {
+  at: string;
+  startedAt: number;
+}
+
+export function loadActiveOverview(): ActiveOverview | null {
+  try {
+    const raw = localStorage.getItem(ACTIVE_OVERVIEW_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ActiveOverview;
+    if (!parsed.at || !Number.isFinite(parsed.startedAt)) {
+      localStorage.removeItem(ACTIVE_OVERVIEW_KEY);
+      return null;
+    }
+    if (Date.now() - parsed.startedAt > OVERVIEW_TTL_MS) {
+      localStorage.removeItem(ACTIVE_OVERVIEW_KEY);
+      return null;
+    }
+    return parsed;
+  } catch {
+    localStorage.removeItem(ACTIVE_OVERVIEW_KEY);
+    return null;
+  }
+}
+
+export function saveActiveOverview(activeOverview: ActiveOverview) {
+  try {
+    localStorage.setItem(ACTIVE_OVERVIEW_KEY, JSON.stringify(activeOverview));
+  } catch {
+    // storage unavailable
+  }
+}
+
+export function clearActiveOverview() {
+  try {
+    localStorage.removeItem(ACTIVE_OVERVIEW_KEY);
   } catch {
     // ignore
   }

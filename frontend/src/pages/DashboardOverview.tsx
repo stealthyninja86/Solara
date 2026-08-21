@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTransactions } from "../hooks/useTransactions";
 import { useTransactionSubmit } from "../hooks/useTransactionSubmit";
 import { useDashboard } from "../hooks/useDashboard";
 // import { usePullToRefresh } from "../hooks/usePullToRefresh"; // temporarily disabled
 import { useBulkImport } from "../hooks/useBulkImport";
-import { getUserId, useAuth } from "../hooks/useAuth";
+import { getUserId } from "../hooks/useAuth";
 import { api } from "../utils/api";
 import { DEFAULT_USER_ID } from "../constants";
 import { TransactionForm } from "../components/cards/TransactionForm";
@@ -21,15 +21,19 @@ import { SubscriptionCard } from "../components/cards/SubscriptionCard";
 import { AddSubscriptionModal } from "../components/modals/AddSubscriptionModal";
 import { ManageSubscriptionModal } from "../components/modals/ManageSubscriptionModal";
 import { SubscriptionCostPreviewModal } from "../components/modals/SubscriptionCostPreviewModal";
+import { ImportTipsModal } from "../components/modals/ImportTipsModal";
 import { HowItWorks, type HowItWorksItem } from "../components/ui/HowItWorks";
 import { OnboardingChecklist } from "../components/cards/OnboardingChecklist";
 import {
+  clearActiveOverview,
   clearBannerData,
   consumeScrollToTransactions,
   HIGHLIGHT_TRANSACTION_KEY,
+  loadActiveOverview,
   loadBannerData,
   loadSelectedMonth,
   persistSelectedMonth,
+  saveActiveOverview,
   saveHighlightTransactionId,
   saveScrollToTransactions,
 } from "../utils/storage";
@@ -67,7 +71,6 @@ const MONTHS = [
 ];
 
 export function DashboardOverview() {
-  const { llmEnabled } = useAuth();
   const transactionSubmit = useTransactionSubmit();
   const transactionsManager = useTransactions();
   const [selected] = useState(loadSelectedMonth);
@@ -92,7 +95,7 @@ export function DashboardOverview() {
     } catch { /* ignore */ }
   }, []);
 
-  const dashboard = useDashboard(selected.month - 1, selected.year, llmEnabled === true);
+  const dashboard = useDashboard(selected.month - 1, selected.year, false);
   const {
     periods,
     spendAnalysis,
@@ -109,6 +112,7 @@ export function DashboardOverview() {
   const [manageSubscription, setManageSubscription] = useState<TrackedSubscription | null>(null);
   const [showAddSubscriptionModal, setShowAddSubscriptionModal] = useState(false);
   const [showCostPreviewModal, setShowCostPreviewModal] = useState(false);
+  const [showImportTipsModal, setShowImportTipsModal] = useState(false);
 
   useEffect(() => {
     if (!scrollToTransactions) return;
@@ -122,6 +126,9 @@ export function DashboardOverview() {
 
   const [generatingOverview, setGeneratingOverview] = useState(false);
   const [generateError, setGenerateError] = useState("");
+  const regeneratePollRef = useRef<number | null>(null);
+  const regenerateAttemptsRef = useRef(0);
+  const regenerateWasEmptyRef = useRef(false);
 
   useEffect(() => {
     const fromMonth = String(selected.month).padStart(2, "0");
@@ -151,11 +158,18 @@ export function DashboardOverview() {
   // }, []);
 
   const handleGenerateOverview = useCallback((refresh = false) => {
+    if (regeneratePollRef.current !== null) {
+      window.clearInterval(regeneratePollRef.current);
+      regeneratePollRef.current = null;
+    }
+    regenerateAttemptsRef.current = 0;
+    regenerateWasEmptyRef.current = false;
     setGeneratingOverview(true);
     setGenerateError("");
     const userId = getUserId() ?? DEFAULT_USER_ID;
     const now = new Date();
     const at = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    saveActiveOverview({ at, startedAt: Date.now() });
     const force = refresh ? "&refresh=true" : "";
     api(`/api/v1/insights/overview?userId=${userId}&period=MONTHLY&at=${at}${force}`)
       .then(async (res) => {
@@ -165,13 +179,85 @@ export function DashboardOverview() {
           } else {
             throw new Error("Generation failed");
           }
+          clearActiveOverview();
+          setGeneratingOverview(false);
           return;
         }
-        reloadDashboard();
+        // Trigger first dashboard reload, then poll until cards appear (async generation)
+        await reloadDashboard();
+        regeneratePollRef.current = window.setInterval(async () => {
+          regenerateAttemptsRef.current += 1;
+          if (regenerateAttemptsRef.current > 30) {
+            if (regeneratePollRef.current !== null) {
+              window.clearInterval(regeneratePollRef.current);
+              regeneratePollRef.current = null;
+            }
+            regenerateWasEmptyRef.current = false;
+            clearActiveOverview();
+            setGeneratingOverview(false);
+            return;
+          }
+          await reloadDashboard();
+        }, 3000);
       })
-      .catch(() => setGenerateError("Generation failed. Please try again."))
-      .finally(() => setGeneratingOverview(false));
+      .catch(() => {
+        setGenerateError("Generation failed. Please try again.");
+        if (regeneratePollRef.current !== null) {
+          window.clearInterval(regeneratePollRef.current);
+          regeneratePollRef.current = null;
+        }
+        regenerateWasEmptyRef.current = false;
+        clearActiveOverview();
+        setGeneratingOverview(false);
+      });
   }, [reloadDashboard]);
+
+  useEffect(() => {
+    if (generatingOverview && overviewCards.length === 0) {
+      regenerateWasEmptyRef.current = true;
+    }
+    if (generatingOverview && regenerateWasEmptyRef.current && overviewCards.length > 0) {
+      if (regeneratePollRef.current !== null) {
+        window.clearInterval(regeneratePollRef.current);
+        regeneratePollRef.current = null;
+      }
+      regenerateAttemptsRef.current = 0;
+      regenerateWasEmptyRef.current = false;
+      clearActiveOverview();
+      setGeneratingOverview(false);
+    }
+  }, [overviewCards, generatingOverview]);
+
+  useEffect(() => {
+    const active = loadActiveOverview();
+    if (active) {
+      setGeneratingOverview(true);
+      regenerateAttemptsRef.current = Math.floor((Date.now() - active.startedAt) / 3000);
+      regeneratePollRef.current = window.setInterval(async () => {
+        regenerateAttemptsRef.current += 1;
+        if (regenerateAttemptsRef.current > 30) {
+          if (regeneratePollRef.current !== null) {
+            window.clearInterval(regeneratePollRef.current);
+            regeneratePollRef.current = null;
+          }
+          regenerateWasEmptyRef.current = false;
+          clearActiveOverview();
+          setGeneratingOverview(false);
+          return;
+        }
+        await reloadDashboard();
+      }, 3000);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (regeneratePollRef.current !== null) {
+        window.clearInterval(regeneratePollRef.current);
+      }
+    };
+  }, []);
 
   // Pull-to-refresh temporarily disabled (see usePullToRefresh).
   // const { pullRef } = usePullToRefresh(handleRefresh, transactionsManager.setPullRefreshing);
@@ -223,7 +309,7 @@ export function DashboardOverview() {
               <Icon name="add" size={12} /> Add
             </button>
             <button
-              onClick={() => bulkImport.fileInputRef.current?.click()}
+              onClick={() => setShowImportTipsModal(true)}
               disabled={bulkImport.importing}
               className="button flex items-center gap-1.5 !px-3 !py-1.5 !text-[0.75rem] text-[var(--color-text-secondary)]!"
             >
@@ -515,6 +601,12 @@ export function DashboardOverview() {
       <SubscriptionCostPreviewModal
         visible={showCostPreviewModal}
         onClose={() => setShowCostPreviewModal(false)}
+      />
+
+      <ImportTipsModal
+        visible={showImportTipsModal}
+        onClose={() => setShowImportTipsModal(false)}
+        onChooseFile={() => bulkImport.fileInputRef.current?.click()}
       />
 
       <div className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-3" style={{ width: "100%", maxWidth: "1000px", margin: "0 auto" }}>

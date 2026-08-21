@@ -12,7 +12,7 @@ import com.solara.insightservice.exception.AiInsightsDisabledException;
 import com.solara.insightservice.model.ReportPeriod;
 import com.solara.insightservice.model.TransactionCategory;
 import com.solara.insightservice.service.insight.InsightGenerator;
-import com.solara.insightservice.service.insight.InsightSurfaceService;
+import com.solara.insightservice.service.insight.InsightFacade;
 import com.solara.insightservice.service.finance.FinanceQueryService;
 import com.solara.insightservice.service.ratelimit.RegenerationRateLimiter;
 import com.solara.insightservice.service.report.ReportService;
@@ -38,18 +38,18 @@ public class AnalyticsController {
 
     private final FinanceQueryService queryService;
     private final ReportService reportService;
-    private final InsightSurfaceService insightSurfaceService;
+    private final InsightFacade insightFacade;
     private final InsightGenerator insightGenerator;
     private final RegenerationRateLimiter regenerationRateLimiter;
 
     private static final Logger log = LoggerFactory.getLogger(AnalyticsController.class);
 
     public AnalyticsController(FinanceQueryService queryService, ReportService reportService,
-                               InsightSurfaceService insightSurfaceService, InsightGenerator insightGenerator,
+                               InsightFacade insightFacade, InsightGenerator insightGenerator,
                                RegenerationRateLimiter regenerationRateLimiter) {
         this.queryService = queryService;
         this.reportService = reportService;
-        this.insightSurfaceService = insightSurfaceService;
+        this.insightFacade = insightFacade;
         this.insightGenerator = insightGenerator;
         this.regenerationRateLimiter = regenerationRateLimiter;
     }
@@ -124,14 +124,14 @@ public class AnalyticsController {
             @RequestParam ReportPeriod period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate at,
             @RequestParam(defaultValue = "false") boolean refresh) {
-        if (!insightSurfaceService.isLlmEnabled(userId)) {
+        if (!insightFacade.isLlmEnabled(userId)) {
             log.info("overview rejected: userId={}, llmEnabled=false", userId);
             throw new AiInsightsDisabledException();
         }
         if (refresh) {
             regenerationRateLimiter.consume(userId);
         }
-        return ResponseEntity.ok(insightSurfaceService.overview(userId, period, at, refresh));
+        return ResponseEntity.ok(insightFacade.overview(userId, period, at, refresh));
     }
 
     @GetMapping("/available-dates")

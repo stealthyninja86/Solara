@@ -1,6 +1,6 @@
 import type { CategorizedTransactionResponse } from "../../types";
 import type { TrackedSubscription, SubscriptionKind } from "../../types/reports";
-import { SUGGESTED_CATEGORIES, PAYMENT_MODES } from "../../constants";
+import { CATEGORY_DESCRIPTIONS, SUGGESTED_CATEGORIES, PAYMENT_MODES } from "../../constants";
 import { categoryWithEmoji, formatCategory, formatDate } from "../../utils";
 import { HowItWorks, type HowItWorksItem } from "../ui/HowItWorks";
 import { Icon } from "../ui/Icon";
@@ -153,12 +153,14 @@ export function TransactionTable({ state, onDelete, subscriptions, highlightTran
               className="filter-select"
               value={state.categoryFilter}
               onChange={(e) => state.setCategoryFilter(e.target.value)}
+              title={state.categoryFilter ? CATEGORY_DESCRIPTIONS[state.categoryFilter] ?? "" : ""}
             >
               <option value="">All</option>
-              <option value="__uncategorized__">Uncategorized</option>
+              <option value="__uncategorized__" title={CATEGORY_DESCRIPTIONS["UNCATEGORIZED"]}>Uncategorized - {CATEGORY_DESCRIPTIONS["UNCATEGORIZED"]}</option>
               {SUGGESTED_CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>{formatCategory(cat)}</option>
+                <option key={cat} value={cat} title={CATEGORY_DESCRIPTIONS[cat]}>{formatCategory(cat)} - {CATEGORY_DESCRIPTIONS[cat]}</option>
               ))}
+              <option value="OTHER" title={CATEGORY_DESCRIPTIONS["OTHER"]}>{formatCategory("OTHER")} - {CATEGORY_DESCRIPTIONS["OTHER"]}</option>
             </select>
           </div>
           <div className="transaction-cell transaction-cell--payment">
@@ -228,7 +230,7 @@ export function TransactionTable({ state, onDelete, subscriptions, highlightTran
                 </span>
                 {'\u20B9'}{transaction.amount.toFixed(2)}
               </span>
-              <span className="transaction-cell transaction-cell--category">
+              <span className="transaction-cell transaction-cell--category" title={transaction.category ? CATEGORY_DESCRIPTIONS[transaction.category] ?? "" : ""}>
                 {categoryWithEmoji(transaction.category)}
               </span>
               <span className="transaction-cell transaction-cell--payment">
