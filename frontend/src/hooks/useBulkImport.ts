@@ -113,7 +113,7 @@ export function useBulkImport() {
         return;
       }
       try {
-        let job: { status: string; minDate?: string; maxDate?: string } | null = null;
+        let job: { status: string; minDate?: string; maxDate?: string; errorReport?: string } | null = null;
         const jobRes = await api(`/api/v1/transactions/bulk/${jobId}?userId=${getUserId() ?? DEFAULT_USER_ID}`);
         if (jobRes.ok) {
           job = await jobRes.json();
@@ -121,8 +121,8 @@ export function useBulkImport() {
             if (pollingRef.current) clearInterval(pollingRef.current);
             clearActiveImport();
             setImporting(false);
-            setImportStatus("Import failed. Please try again.");
-            setTimeout(() => setImportStatus(""), 3000);
+            setImportStatus(job!.errorReport ?? "Import failed. Please try again.");
+            setTimeout(() => setImportStatus(""), 4000);
             return;
           }
         }
@@ -159,8 +159,8 @@ export function useBulkImport() {
       if (job.status === "FAILED") {
         clearActiveImport();
         setImporting(false);
-        setImportStatus("Import failed. Please try again.");
-        setTimeout(() => setImportStatus(""), 3000);
+        setImportStatus(job.errorReport ?? "Import failed. Please try again.");
+        setTimeout(() => setImportStatus(""), 4000);
         return;
       }
       if (job.status !== "COMPLETED") {
@@ -206,7 +206,13 @@ export function useBulkImport() {
 
     try {
       const response = await api("/api/v1/transactions/bulk/upload", { method: "POST", body: formData });
-      if (!response.ok) throw new Error("Upload failed");
+      if (!response.ok) {
+        if (response.status === 413) {
+          const data = await response.json().catch(() => null);
+          throw new Error(data?.error ?? "File too large — maximum 2 MB. Split into smaller files and upload one at a time.");
+        }
+        throw new Error("Upload failed");
+      }
       const data = await response.json();
       setImportStatus("Processing transactions\u2026");
       if (pollingRef.current) clearInterval(pollingRef.current);
@@ -230,18 +236,19 @@ export function useBulkImport() {
             } else if (status.status === "FAILED") {
               if (pollingRef.current) clearInterval(pollingRef.current);
               setImporting(false);
-              setImportStatus("Import failed. Please try again.");
-              setTimeout(() => setImportStatus(""), 3000);
+              setImportStatus(status.errorReport ?? "Import failed. Please try again.");
+              setTimeout(() => setImportStatus(""), 4000);
             }
           }
         } catch {
           // retry on next interval
         }
       }, 1500);
-    } catch {
+    } catch (error) {
       setImporting(false);
-      setImportStatus("Upload failed. Please try again.");
-      setTimeout(() => setImportStatus(""), 3000);
+      const message = error instanceof Error ? error.message : "Upload failed. Please try again.";
+      setImportStatus(message);
+      setTimeout(() => setImportStatus(""), 4000);
     }
   }, []);
 

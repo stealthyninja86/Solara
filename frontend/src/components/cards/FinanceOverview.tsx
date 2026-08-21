@@ -21,15 +21,10 @@ interface Props {
 }
 
 const TYPE_DOTS: Record<string, { color: string; pulseClass: string; title: string }> = {
-  ACTION: { color: "var(--color-bad)", pulseClass: "animate-ping", title: "Action" },
-  NEXT: { color: "var(--color-warn)", pulseClass: "animate-ping-slow", title: "Next" },
-  STATUS: { color: "var(--color-ok)", pulseClass: "animate-ping-slow", title: "Status" },
+  ACTION: { color: "var(--color-bad)", pulseClass: "animate-radar", title: "Action" },
+  NEXT: { color: "var(--color-warn)", pulseClass: "animate-radar-slow", title: "Next" },
+  STATUS: { color: "var(--color-ok)", pulseClass: "animate-radar-slow", title: "Status" },
 };
-
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 export function FinanceOverview({ month, year, cards, loading = false, transactionCount = 0, generating = false, regenerating = false, generateError, onGenerate, onRegenerate }: Props) {
   const { llmEnabled } = useAuth();
@@ -90,10 +85,10 @@ export function FinanceOverview({ month, year, cards, loading = false, transacti
       {!isCurrentMonth ? (
         <div className="mt-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-deep)] p-6 text-center">
           <p className="text-caption text-[var(--color-text-muted)]">
-            To view your up-to-date overview for {MONTH_NAMES[month]} {year}, please check your current month.
+            To view your up-to-date overview, please check your current month.
           </p>
         </div>
-      ) : regenerating && hasEnoughData ? (
+      ) : (generating || regenerating) && hasEnoughData ? (
         <div className="mt-4 flex flex-col items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-deep)] p-10 text-center">
           <span className="spinner !h-6 !w-6" aria-hidden="true" />
           <p className="text-caption text-[var(--color-text-muted)]">
