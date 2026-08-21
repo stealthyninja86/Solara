@@ -52,6 +52,12 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", ex.getMessage(), "retryAfterSeconds", Long.toString(ex.retryAfterSeconds())));
     }
 
+    @ExceptionHandler(AiInsightsDisabledException.class)
+    public ResponseEntity<Map<String, String>> handleAiDisabled(AiInsightsDisabledException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, String>> handleGeneral(Exception ex) {
         log.error("Unhandled exception", ex);

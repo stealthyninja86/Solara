@@ -26,7 +26,7 @@ export function TrendChart({ data, ranges }: Props) {
 
   const allValues = useMemo(() => points.flatMap((d) => [d.income, d.expenses]), [points]);
   const maxVal = Math.max(...allValues);
-  const rangeMax = maxVal || 1;
+  const rangeMax = Number.isFinite(maxVal) && maxVal > 0 ? maxVal : 1;
 
   const toX = (i: number) => padding.left + (i / Math.max(points.length - 1, 1)) * chartW;
   const toY = (val: number) => padding.top + chartH - (val / rangeMax) * chartH;
@@ -54,8 +54,9 @@ export function TrendChart({ data, ranges }: Props) {
 
   const lastX = points.length > 1 ? toX(points.length - 1) : padding.left + chartW;
   const baseY = padding.top + chartH;
-  const incomeAreaPath = `${incomePath} L${lastX},${baseY} L${toX(0)},${baseY} Z`;
-  const expenseAreaPath = `${expensePath} L${lastX},${baseY} L${toX(0)},${baseY} Z`;
+  const canDrawAreas = points.length > 1;
+  const incomeAreaPath = canDrawAreas ? `${incomePath} L${lastX},${baseY} L${toX(0)},${baseY} Z` : "";
+  const expenseAreaPath = canDrawAreas ? `${expensePath} L${lastX},${baseY} L${toX(0)},${baseY} Z` : "";
 
   const gridLines = [0, 0.25, 0.5, 0.75, 1].map((pct) => {
     const val = rangeMax * pct;

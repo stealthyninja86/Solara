@@ -40,9 +40,6 @@ public class MerchantProfile {
     @Column(name = "category", nullable = false, length = 50)
     private TransactionCategory category;
 
-    @Column(name = "embedding", columnDefinition = "vector(768)", nullable = false)
-    private float[] embedding;
-
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
@@ -50,14 +47,13 @@ public class MerchantProfile {
     }
 
     public MerchantProfile(UUID userId, String merchant, String normalizedMerchant,
-                           String description, TransactionCategory category, float[] embedding) {
+                           String description, TransactionCategory category) {
         this.id = UUID.randomUUID();
         this.userId = userId;
         this.merchant = merchant;
         this.normalizedMerchant = normalizedMerchant;
         this.description = description;
         this.category = category;
-        this.embedding = embedding;
     }
 
     public UUID getId() {
@@ -82,10 +78,6 @@ public class MerchantProfile {
 
     public TransactionCategory getCategory() {
         return category;
-    }
-
-    public float[] getEmbedding() {
-        return embedding;
     }
 
     public Instant getUpdatedAt() {

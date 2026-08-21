@@ -3,23 +3,32 @@ import { useNavigate } from "react-router-dom";
 import type { TimePeriod } from "../../types/reports";
 import { useRecommendations } from "../../hooks/useRecommendations";
 import { useAuth } from "../../hooks/useAuth";
+import { useRegenerationStatus } from "../../hooks/useRegenerationStatus";
 import { PeriodSelect } from "../ui/PeriodSelect";
 import { HowItWorks, type HowItWorksItem } from "../ui/HowItWorks";
 import { Icon } from "../ui/Icon";
-import { TypewriterText } from "../ui/TypewriterText";
+import { RetryCountdown } from "./RetryCountdown";
+import { StatusDot } from "../ui/StatusDot";
+import { highlightText } from "../../utils/highlight";
 
 interface Props {
   month: number;
   year: number;
   refreshKey?: number;
-  transactionCount?: number;
-  onGenerate?: () => void;
+  hasEnoughData?: boolean;
 }
 
-const TYPE_DOTS: Record<string, { className: string; title: string }> = {
-  ACTION: { className: "bg-[var(--color-bad)]", title: "Action" },
-  NEXT: { className: "bg-[var(--color-warn)]", title: "Next" },
-  STATUS: { className: "bg-[var(--color-ok)]", title: "Status" },
+const TYPE_DOTS: Record<string, { color: string; pulseClass: string; title: string }> = {
+  ACTION: { color: "var(--color-warn)", pulseClass: "animate-radar-slow", title: "Action" },
+  NEXT: { color: "var(--color-warn)", pulseClass: "animate-radar-slow", title: "Next" },
+  STATUS: { color: "var(--color-ok)", pulseClass: "animate-radar-slow", title: "Status" },
+};
+
+const ACTION_DOTS: Record<string, { color: string; pulseClass: string; title: string }> = {
+  cut_spending: { color: "var(--color-bad)", pulseClass: "animate-radar", title: "Cut spending" },
+  set_budget: { color: "var(--color-warn)", pulseClass: "animate-radar-slow", title: "Set budget" },
+  review_budget: { color: "var(--color-warn)", pulseClass: "animate-radar-slow", title: "Review budget" },
+  categorize_transactions: { color: "var(--color-text-muted)", pulseClass: "", title: "Categorize transactions" },
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -34,12 +43,12 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-export function Recommendations({ month, year, refreshKey = 0, transactionCount = 0, onGenerate }: Props) {
+export function Recommendations({ month, year, refreshKey = 0, hasEnoughData = true }: Props) {
   const navigate = useNavigate();
   const { llmEnabled } = useAuth();
+  const { remaining, limit, refresh: refreshRegenerationStatus } = useRegenerationStatus();
   const [period, setPeriod] = useState<TimePeriod>("monthly");
-  const { recommendations, loading, error, regenerate } = useRecommendations(month, year, period, refreshKey);
-  const hasEnoughData = transactionCount >= 3;
+  const { recommendations, loading, error, regenerating, regenerate } = useRecommendations(month, year, period, refreshKey, llmEnabled === true);
 
   if (llmEnabled === false) return null;
 
@@ -55,15 +64,41 @@ export function Recommendations({ month, year, refreshKey = 0, transactionCount 
         <div className="flex items-center gap-2">
           <PeriodSelect value={period} onChange={setPeriod} />
           {recommendations.length > 0 && isCurrentMonth && (
-            <button
-              type="button"
-              onClick={regenerate}
-              disabled={loading}
-              className="text-button shrink-0"
-              title="Re-roll the cards with the latest data"
-            >
-              <Icon name="ai-insights" size={12} /> Regenerate
-            </button>
+            <div className="flex items-center gap-2">
+              <span
+                className={`text-caption ${
+                  remaining === 0
+                    ? "text-[var(--color-bad)]"
+                    : "text-[var(--color-text-muted)]"
+                }`}
+              >
+                {remaining}/{limit} today
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  regenerate();
+                  void refreshRegenerationStatus();
+                }}
+                disabled={loading || remaining === 0}
+                className="text-button shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
+                title={
+                  remaining === 0
+                    ? "Regeneration limit reached — try again tomorrow"
+                    : "Re-roll the cards with the latest data"
+                }
+              >
+                {loading ? (
+                  <>
+                    <span className="spinner !h-3.5 !w-3.5" /> Regenerating…
+                  </>
+                ) : (
+                  <>
+                    <Icon name="ai-insights" size={12} /> Regenerate
+                  </>
+                )}
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -80,77 +115,47 @@ export function Recommendations({ month, year, refreshKey = 0, transactionCount 
             To view your up-to-date recommendations for {MONTH_NAMES[month]} {year}, please check your current month.
           </p>
         </div>
-      ) : loading ? (
-        <div className="flex flex-col gap-4">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-deep)] p-4">
-              <div className="mb-2 flex items-start gap-2">
-                <div className="h-4 w-12 animate-pulse rounded bg-[var(--color-text)]/10" />
-                <div className="h-3.5 w-48 animate-pulse rounded bg-[var(--color-text)]/8" />
-              </div>
-              <div className="ml-1 flex flex-col gap-1.5">
-                <div className="h-3 w-full animate-pulse rounded bg-[var(--color-text)]/6" />
-                <div className="h-3 w-32 animate-pulse rounded bg-[var(--color-text)]/6" />
-              </div>
-            </div>
-          ))}
+      ) : regenerating && hasEnoughData ? (
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-deep)] p-10 text-center">
+          <span className="spinner !h-6 !w-6" aria-hidden="true" />
+          <p className="text-caption text-[var(--color-text-muted)]">
+            Regenerating your recommendations…
+          </p>
         </div>
-      ) : recommendations.length === 0 ? (
-        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-deep)] p-6 text-center">
-          {hasEnoughData ? (
-            <>
-              <p className="text-caption text-[var(--color-text-muted)]">
-                No recommendations generated yet.
-              </p>
-              {onGenerate && (
-                <button
-                  onClick={onGenerate}
-                  className="btn-primary mt-3"
-                >
-                  <Icon name="ai-insights" size={14} /> Generate Recommendations
-                </button>
-              )}
-            </>
-          ) : (
-            <p className="text-caption text-[var(--color-text-muted)]">
-              Add at least 3 transactions to see Recommendations.
-            </p>
-          )}
-        </div>
-      ) : (
+      ) : recommendations.length > 0 ? (
         <div className="flex flex-col gap-4">
-          {recommendations.map((rec, index) => {
-            const dot = TYPE_DOTS[rec.card.type];
+          {recommendations.map((rec) => {
+            const dot = rec.action ? (ACTION_DOTS[rec.action] ?? TYPE_DOTS[rec.card.type]) : TYPE_DOTS[rec.card.type];
             const change = rec.card.changePercent;
             const delta = change !== null ? Number.parseInt(change, 10) : null;
             return (
               <div key={rec.card.factId} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-deep)] p-4">
                 <div className="mb-2 flex items-center gap-2">
                   {dot && (
-                    <span
-                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot.className}`}
-                      title={dot.title}
-                      aria-hidden
-                    />
+                    <StatusDot color={dot.color} pulseClass={dot.pulseClass} title={dot.title} />
                   )}
                   <span className="text-[0.95rem] font-semibold leading-snug text-[var(--color-text)]">
-                    <TypewriterText
-                      text={rec.card.text.headline ?? rec.card.label}
-                      speed={16 + index * 2}
-                      className="text-[0.95rem] font-semibold leading-snug text-[var(--color-text)]"
-                    />
+                    {highlightText(rec.card.text.headline ?? rec.card.label, rec.card.label)}
                   </span>
                 </div>
 
                 <div className="mb-2 ml-1">
                   <p className="text-small text-[var(--color-text)]">
-                    <TypewriterText text={rec.card.text.body} speed={12 + index * 2} />
+                    {highlightText(rec.card.text.body ?? "", rec.card.label)}
                   </p>
                 </div>
 
+                {rec.card.retryAfterSeconds != null && (
+                  <div className="mb-2 ml-1">
+                    <p className="text-caption text-[var(--color-warn)]">
+                      Generation failed — <RetryCountdown seconds={rec.card.retryAfterSeconds} />
+                    </p>
+                  </div>
+                )}
+
                 <div className="mb-3 ml-1 flex flex-wrap items-center gap-2">
                   <span className="text-caption font-medium text-[var(--color-text-light)]">
-                    <TypewriterText text={rec.card.value} speed={14 + index * 2} />
+                    {rec.card.value ?? ""}
                   </span>
                   {delta !== null && (
                     <span
@@ -187,6 +192,42 @@ export function Recommendations({ month, year, refreshKey = 0, transactionCount 
               </div>
             );
           })}
+        </div>
+      ) : loading ? (
+        <div className="flex flex-col gap-4">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-deep)] p-4">
+              <div className="mb-2 flex items-start gap-2">
+                <div className="h-4 w-12 animate-pulse rounded bg-[var(--color-text)]/10" />
+                <div className="h-3.5 w-48 animate-pulse rounded bg-[var(--color-text)]/8" />
+              </div>
+              <div className="ml-1 flex flex-col gap-1.5">
+                <div className="h-3 w-full animate-pulse rounded bg-[var(--color-text)]/6" />
+                <div className="h-3 w-32 animate-pulse rounded bg-[var(--color-text)]/6" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-deep)] p-6 text-center">
+          <p className="text-caption text-[var(--color-text-muted)]">
+            No recommendations generated yet.
+          </p>
+          <button
+            onClick={regenerate}
+            disabled={loading}
+            className="btn-primary mt-3"
+          >
+            {loading ? (
+              <>
+                <span className="spinner !h-3.5 !w-3.5" /> Generating recommendations…
+              </>
+            ) : (
+              <>
+                <Icon name="ai-insights" size={14} /> Generate Recommendations
+              </>
+            )}
+          </button>
         </div>
       )}
 

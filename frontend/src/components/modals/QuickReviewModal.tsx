@@ -1,5 +1,5 @@
 import type { CategorizedTransactionResponse, PaymentMode, TransactionCategory, TransactionResponse } from "../../types";
-import { SUGGESTED_CATEGORIES, PAYMENT_MODES } from "../../constants";
+import { CATEGORY_DESCRIPTIONS, SUGGESTED_CATEGORIES, PAYMENT_MODES } from "../../constants";
 import { categoryWithEmoji, formatCategory } from "../../utils";
 import { Modal } from "../ui/Modal";
 import { Icon } from "../ui/Icon";
@@ -179,11 +179,13 @@ export function QuickReviewModal({
           >
             <option value="">Keep suggestion</option>
             {SUGGESTED_CATEGORIES.map((cat) => (
-              <option key={cat} value={cat}>{formatCategory(cat)}</option>
+              <option key={cat} value={cat} title={CATEGORY_DESCRIPTIONS[cat]}>
+                {formatCategory(cat)} - {CATEGORY_DESCRIPTIONS[cat]}
+              </option>
             ))}
           </select>
-          <p className="mt-1 text-[0.65rem] text-[var(--color-text-muted)]">
-            Leave empty to keep the AI suggestion.
+          <p className="mt-1 text-[0.65rem] leading-snug text-[var(--color-text-muted)]">
+            {selectedCategory ? CATEGORY_DESCRIPTIONS[selectedCategory] : "Leave empty to keep the AI suggestion."}
           </p>
         </div>
 

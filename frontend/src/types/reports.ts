@@ -33,9 +33,9 @@ export interface SpendingVelocity {
 export type InsightType = "STATUS" | "ACTION" | "NEXT";
 
 export interface CardText {
-  headline: string;
-  body: string;
-  suggestion: string;
+  headline: string | null;
+  body: string | null;
+  suggestion: string | null;
 }
 
 export interface InsightCard {
@@ -43,9 +43,15 @@ export interface InsightCard {
   type: InsightType;
   label: string;
   text: CardText;
-  value: string;
+  value: string | null;
   changePercent: string | null;
   action: string | null;
+  retryAfterSeconds: number | null;
+}
+
+export interface RegenerationStatus {
+  limit: number;
+  used: number;
 }
 
 export interface Recommendation {

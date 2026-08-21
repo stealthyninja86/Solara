@@ -2,7 +2,7 @@ import type { PaymentMode, TransactionCategory, TransactionType } from "../types
 
 export const TRANSACTION_TYPES: TransactionType[] = ["DEBIT", "CREDIT"];
 
-export const BANK_FORMATS = ["HDFC", "ICICI", "AXIS", "SBI", "KOTAK"];
+
 
 export const PAYMENT_MODES: PaymentMode[] = [
   "CASH", "CREDIT_CARD", "DEBIT_CARD", "UPI",
@@ -60,6 +60,29 @@ export const CATEGORY_LABELS: Record<string, string> = {
   "OTHER": "Other",
   "UNCATEGORIZED": "Uncategorized",
   "BUDGET": "Budget",
+};
+
+export const CATEGORY_DESCRIPTIONS: Record<string, string> = {
+  "FOOD_DINING": "Eating out at restaurants and cafes — e.g., dinner at a cafe",
+  "GROCERIES": "Groceries for cooking at home — e.g., weekly vegetables",
+  "TRANSPORT": "Daily commute and local travel — e.g., metro ride to work",
+  "FUEL": "Fuel for your vehicle — e.g., petrol refill",
+  "SHOPPING": "Everyday shopping — e.g., household items from a store",
+  "CLOTHING": "Clothes and apparel — e.g., a shirt from a clothing store",
+  "ELECTRONICS": "Gadgets and electronics — e.g., phone accessories",
+  "ENTERTAINMENT": "Movies, shows and leisure — e.g., a movie night",
+  "BILLS_UTILITIES": "Household bills and utilities — e.g., electricity bill",
+  "HEALTHCARE": "Medical and health expenses — e.g., pharmacy purchase",
+  "PET": "Pet care expenses — e.g., pet food",
+  "RENT": "Housing rent — e.g., monthly house rent",
+  "LOAN_EMI": "Loan and EMI payments — e.g., monthly loan payment",
+  "INVESTMENT": "Money set aside to grow — e.g., monthly SIP",
+  "SALARY": "Income from salary — e.g., monthly salary credit",
+  "EDUCATION": "Learning and education fees — e.g., course fee",
+  "TRAVEL": "Trips and travel — e.g., train ticket",
+  "OTHER": "Other spending not listed above",
+  "UNCATEGORIZED": "Not yet categorized",
+  "BUDGET": "Budget placeholder",
 };
 
 export const CATEGORY_COLORS = [

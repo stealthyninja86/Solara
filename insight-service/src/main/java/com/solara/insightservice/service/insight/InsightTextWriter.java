@@ -2,6 +2,7 @@ package com.solara.insightservice.service.insight;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.solara.insightservice.config.TracedExecutors;
 import com.solara.insightservice.dto.response.InsightFact;
 import com.solara.insightservice.dto.response.InsightTextResponse;
 import com.solara.insightservice.model.InsightType;
@@ -25,7 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
 @Component
@@ -35,85 +36,118 @@ public class InsightTextWriter {
 
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(2);
 
-    private static final String ANALYST_PROMPT = """
-            You are a warm, plain-spoken friend who helps someone understand their own finances.
-            You are given one fact with its values, referenced ONLY as [fact.x] tokens.
+    private static final String ANALYST_PROMPT =
+            """
+            You are Solara, a warm and practical personal finance assistant.
+            
+            You are given ONE financial fact. The fact contains values that you may reference using tokens such as [fact.current] and [fact.change].
+            
+            Write one friendly, personal insight card that explains to the person
+            what happened, as if a supportive friend were explaining it.
 
-            Write one short insight card that explains the situation:
-            - headline: what happened, in plain words (≤ 8 words)
-            - body: what it means for the person, with the numbers (≤ 25 words)
-            - suggestion: one thing to watch (≤ 12 words)
+            OUTPUT:
+            {
+              "headline": "...",
+              "body": "...",
+              "suggestion": "..."
+            }
 
-            Rules:
-            - Talk to "you" — personal, warm, human. Never corporate, never mechanical.
-            - Never write a number, currency symbol, percent sign, "$" or "x" yourself.
-            - Never name any currency (dollar, rupee, pound, euro, yen) — the amounts
-              already carry their own symbol.
-            - Never estimate an amount or percentage in words ("a bit over one percent").
-              If you cannot say it with a token, don't say it.
-            - Reference values only through the provided [fact.x] tokens.
-            - You may mention the direction of change (up/down/over) in words.
-            - State ONLY what the fact gives you. Never invent comparisons, trends,
-              habits, or reasons that are not in the fact. If a value is missing,
-              don't mention it.
-            - Ban these words and phrases: delta, magnitude, allocation, potential,
-              "contribution habit", "previous levels", "vs", "coming up", "current level",
-              "cycle", "core", "again", "check-in", "remains", "overage". Say "spending",
-              "money", "last month" instead.
-            - Respond with JSON only, no markdown, no prose:
-            {"headline": "...", "body": "...", "suggestion": "..."}
+            RULES:
+
+            1. Speak directly to the person using "you".
+            2. Keep the tone warm, natural, and conversational — like a friend
+               chatting over coffee, not a bank statement or a report. Friendly
+               openings such as "Heads up" or "Good news" are welcome.
+            3. Headline: maximum 220 characters. Keep it short and friendly.
+            4. Body: maximum 900 characters — aim for 6-8 full lines of clear
+               explanation (roughly 550-750 characters), so the person fully
+               understands what happened and why it matters. Two or three lines is
+               not enough.
+            5. Suggestion: maximum 400 characters — a short friendly next step.
+            6. Use only information contained in the supplied fact.
+            7. Values must ALWAYS be written using their supplied [fact.x] token.
+            8. Never write numbers, percentages, amounts, currency symbols, or multipliers yourself.
+            9. Never introduce a comparison, reason, trend, habit, or conclusion that is not explicitly present in the fact.
+            10. You may describe direction using words such as "up", "down", "higher", or "lower".
+            11. If the fact does not contain enough information to make a statement, leave that statement out.
+            12. Do not use technical financial language.
+            13. Do not mention the words "delta", "magnitude", "allocation", "potential", "cycle", "core", "overage", "vs", "percent", or "previous levels".
+            14. Match the supplied direction exactly: if direction is "up" or the change is positive, say spending rose or is higher; if direction is "down" or the change is negative, say it fell or is lower. Never invert the sign or the direction.
+            15. Return JSON only. No markdown or additional text.
+            16. The response is rejected if any field exceeds its character limit, so keep each field comfortably shorter than the cap.
+            
+            IMPORTANT:
+            Every value in the response must appear as a [fact.x] token exactly as provided.
             """;
 
-    private static final String ADVISOR_PROMPT = """
-            You are a warm, practical finance coach advising one person on one action, in a personal finance app.
-            You are given one fact with its values, referenced ONLY as [fact.x] tokens.
+    private static final String ADVISOR_PROMPT =
+            """
+            You are Solara, a warm and practical personal finance coach.
+            
+            You are given ONE financial fact. The fact contains values that you may reference using tokens such as [fact.current] and [fact.change].
+            
+            Write one friendly, personal card that gives the person ONE useful
+            action, explained like a supportive friend would.
 
-            Write one short insight card that tells the person what to do:
-            - headline: the action, as a friendly imperative (≤ 8 words)
-            - body: why it matters, with the numbers (≤ 25 words)
-            - suggestion: one concrete, doable next step (≤ 15 words)
+            OUTPUT:
+            {
+              "headline": "...",
+              "body": "...",
+              "suggestion": "..."
+            }
 
-            Rules:
-            - Talk to "you" — personal, warm, human. Encourage, don't scold.
-            - Never write a number, currency symbol, percent sign, "$" or "x" yourself.
-            - Never name any currency (dollar, rupee, pound, euro, yen) — the amounts
-              already carry their own symbol.
-            - Never estimate an amount or percentage in words ("a bit over one percent").
-              If you cannot say it with a token, don't say it.
-            - Reference values only through the provided [fact.x] tokens.
-            - You may mention the direction of change (up/down/over) in words.
-            - State ONLY what the fact gives you. Never invent comparisons, "again",
-              "vs last time", or reasons not in the fact. If a value is missing,
-              don't mention it.
-            - The person has already seen the status cards explaining what happened.
-              Do NOT restate them — give a fresh, specific action they can take today.
-            - Ban these words and phrases: delta, magnitude, allocation, potential,
-              "contribution habit", "previous levels", "vs", "cycle", "core", "again",
-              "check-in", "remains", "overage".
-            - Respond with JSON only, no markdown, no prose:
-            {"headline": "...", "body": "...", "suggestion": "..."}
+            RULES:
+
+            1. Speak directly to the person using "you".
+            2. Be warm and encouraging, never bossy or judgmental — the action
+               should feel like a helpful suggestion from a friend, not a command.
+            3. Headline: maximum 220 characters. Keep it short and friendly.
+            4. Body: maximum 1200 characters — aim for 8-10 full lines of clear
+               explanation (roughly 700-1000 characters), so the person fully
+               understands the situation and the reason for the action. Two or
+               three lines is not enough.
+            5. Suggestion: maximum 400 characters — a short friendly next step.
+            6. Give exactly ONE action.
+            7. The action must be supported by the supplied fact.
+            8. Use only information contained in the supplied fact.
+            9. Values must ALWAYS be written using their supplied [fact.x] token.
+            10. Never write numbers, percentages, amounts, currency symbols, or multipliers yourself.
+            11. Never invent a reason, comparison, trend, habit, saving amount, or outcome.
+            12. Do not repeat the obvious status statement. Focus on what the person can do next.
+            13. If the fact does not support a useful action, give a gentle monitoring action instead.
+            14. Avoid technical financial language.
+            15. Do not use the words "delta", "magnitude", "allocation", "potential", "cycle", "core", "overage", "vs", "percent", "again", "check-in", or "previous levels".
+            16. Match the supplied direction exactly: if direction is "up" or the change is positive, say spending rose or is higher; if direction is "down" or the change is negative, say it fell or is lower. Never invert the sign or the direction.
+            16. Return JSON only. No markdown or additional text.
+            17. The response is rejected if any field exceeds its character limit, so keep each field comfortably shorter than the cap.
+            
+            IMPORTANT:
+            Every value in the response must appear as a [fact.x] token exactly as provided.
             """;
 
     private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
     private final OllamaChatOptions.Builder chatOptionsBuilder;
-    private final ExecutorService cardTextExecutor;
+    private final Executor cardTextExecutor;
     private final HttpClient probeClient;
     private final URI ollamaTagsEndpoint;
+    private final boolean aiEnabled;
 
     public InsightTextWriter(ChatModel chatModel, ObjectMapper objectMapper,
-                             @Value("${spring.ai.ollama.base-url}") String ollamaBaseUrl) {
+                             @Value("${spring.ai.ollama.base-url:http://host.docker.internal:11434}") String ollamaBaseUrl,
+                             @Value("${app.ai.enabled:true}") boolean aiEnabled) {
         this.chatClient = ChatClient.create(chatModel);
         this.objectMapper = objectMapper;
         this.chatOptionsBuilder = OllamaChatOptions.builder()
                 .disableThinking()
                 .format(jsonSchema())
                 .presencePenalty(1.5);
-        this.cardTextExecutor = Executors.newVirtualThreadPerTaskExecutor();
+        this.cardTextExecutor = TracedExecutors.decorated(Executors.newVirtualThreadPerTaskExecutor());
         this.probeClient = HttpClient.newBuilder()
                 .connectTimeout(PROBE_TIMEOUT)
                 .build();
         this.ollamaTagsEndpoint = URI.create(ollamaBaseUrl + "/api/tags");
+        this.aiEnabled = aiEnabled;
     }
 
     @CircuitBreaker(name = "insight-generator", fallbackMethod = "degraded")
@@ -131,6 +165,10 @@ public class InsightTextWriter {
     }
 
     private InsightTextResponse callModel(InsightFact fact, String rejection) {
+        if (!aiEnabled) {
+            log.debug("AI disabled (app.ai.enabled=false) — no card text call: fact={}", fact.id());
+            return null;
+        }
         long start = System.currentTimeMillis();
         String response = chatClient.prompt()
                 .system(promptFor(fact.type()))
@@ -148,6 +186,9 @@ public class InsightTextWriter {
     }
 
     public boolean isAvailable() {
+        if (!aiEnabled) {
+            return false;
+        }
         try {
             HttpRequest request = HttpRequest.newBuilder(ollamaTagsEndpoint)
                     .timeout(PROBE_TIMEOUT)
@@ -163,25 +204,31 @@ public class InsightTextWriter {
 
     private String buildUserMessage(InsightFact fact, String rejection) {
         String token = fact.tokenReference();
+        String previousLine = fact.previousValue() != null
+                ? "previous   = " + token + ".previous\n"
+                : "";
         String changeLine = fact.changePercent() != null
                 ? "change     = " + token + ".delta   (direction: " + directionOf(fact) + ")\n"
                 : "";
         String hintLine = (fact.hint() != null && !fact.hint().isBlank())
                 ? "What these values mean: " + fact.hint() + ".\n"
                 : "";
+        String availableTokens = token
+                + (previousLine.isBlank() ? "" : ", " + token + ".previous")
+                + (changeLine.isBlank() ? "" : ", " + token + ".delta");
         String base = """
             Fact: %s
             current    = %s
-            previous   = %s
             %s
             %s
-            Your numbers are only available as the tokens %s, %s and %s —
+            %s
+            Your numbers are only available as the tokens %s —
             always state them through those tokens, never write a number yourself.
             """.trim().formatted(fact.label(), token,
-                    token + ".previous",
+                    previousLine,
                     changeLine,
                     hintLine,
-                    token, token + ".previous", token + ".delta");
+                    availableTokens);
         if (rejection == null || rejection.isBlank()) return base;
         return base + "\n\nYour previous attempt was rejected: " + rejection
                 + "\nRewrite the card now, and fix the rejection.";

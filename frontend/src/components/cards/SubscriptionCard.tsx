@@ -1,5 +1,5 @@
 import type { TrackedSubscription, SubscriptionFrequency, SubscriptionKind } from "../../types/reports";
-import { annualCost } from "../../hooks/useSubscriptions";
+import { annualCost } from "../../hooks/useDashboard";
 import { HowItWorks, type HowItWorksItem } from "../ui/HowItWorks";
 import { Icon } from "../ui/Icon";
 
@@ -80,7 +80,7 @@ function statusVisual(subscription: TrackedSubscription): StatusVisual {
   if (subscription.cycleState === "NOT_SEEN") {
     return {
       dot: "var(--color-bad)",
-      pulseClass: "animate-ping",
+      pulseClass: "animate-radar",
       line: `Not charged in ${cyclesOverdue(subscription)} cycles — still active?`,
     };
   }
@@ -90,13 +90,13 @@ function statusVisual(subscription: TrackedSubscription): StatusVisual {
   let pulseClass: string;
   if (daysLeft > 5) {
     dot = "var(--color-ok)";
-    pulseClass = "animate-ping-slow";
+    pulseClass = "animate-radar-slow";
   } else if (daysLeft >= 1) {
     dot = "var(--color-warn)";
-    pulseClass = "animate-ping";
+    pulseClass = "animate-radar";
   } else {
     dot = "var(--color-bad)";
-    pulseClass = "animate-ping";
+    pulseClass = "animate-radar";
   }
   const dueWord = kind === "SUBSCRIPTION" ? "renews" : "due";
   const pastWord = kind === "SUBSCRIPTION" ? "exceeded renewal date by" : "exceeded due date by";

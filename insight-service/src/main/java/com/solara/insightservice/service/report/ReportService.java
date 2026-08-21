@@ -16,6 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.Optional;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
@@ -26,6 +28,7 @@ import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -51,6 +54,11 @@ public class ReportService {
 
     private static final List<TransactionCategory> CATEGORY_SUM_EXCLUDED =
             List.of(TransactionCategory.BUDGET, TransactionCategory.INVESTMENT);
+
+    private static final List<TransactionCategory> INVESTMENT_ONLY_EXCLUDED =
+            Arrays.stream(TransactionCategory.values())
+                    .filter(category -> category != TransactionCategory.INVESTMENT)
+                    .toList();
 
     private final CategorizedTransactionRepository categorizedTransactionRepository;
     private final FinanceQueryService financeQueryService;
@@ -203,15 +211,34 @@ public class ReportService {
                     InsightType.STATUS,
                     "your savings left after spending, with your income alongside for comparison"));
         }
+        if (summary.income().signum() > 0) {
+            BigDecimal invested = investedThisPeriod(userId, report);
+            if (invested.signum() > 0) {
+                facts.add(new InsightFact("investment_amount", "Invested amount",
+                        rupees(invested), null, null,
+                        InsightType.STATUS,
+                        "the amount moved into investments this period; encourage consistent investing as a healthy habit, never advise selling or stopping investments"));
+            }
+        }
+        // Budget left — the number every persona checks first (housewife / salaried / student)
+        // Value = rupees left, previous = percent used. Keep language in rupees + days, not just %.
+        createBudgetStatusFact(userId, period, report, summary).ifPresent(facts::add);
+        // Upcoming recurring — bills/EMI/rent due later this month, already reserved from budget
+        createUpcomingRecurringFact(userId, period, report).ifPresent(facts::add);
+        // Budget action — actionable tip for recommendations when budget is tight
+        createBudgetActionFact(userId, period, report, summary).ifPresent(facts::add);
+        createUpcomingActionFact(userId, period, report).ifPresent(facts::add);
         // Only meaningful with income set: with income 0/unset, savings is
         // always negative and "spending exceeded income" is a false alarm.
         if (summary.income().signum() > 0 && summary.expenses().signum() > 0 && summary.savings().signum() < 0) {
             facts.add(new InsightFact("over_budget", "Spending exceeded income",
                     rupees(summary.savings().abs()), rupees(summary.income()), null,
                     InsightType.ACTION,
-                    "how much more was spent than was earned, with the income alongside for comparison; there is no change value"));
+                    "how much more was spent than was earned, with the income alongside for comparison; there is no change value; "
+                    + "say plainly you are over by that amount and give one tiny household tip to get back on track (e.g., pause a non-essential subscription, cook at home); "
+                    + "keep it to one plain sentence a housewife, salaried employee or student would understand"));
         }
-        if (!categories.isEmpty()) {
+        if (!categories.isEmpty() && summary.expenses().signum() > 0) {
             ReportCategorySpending top = categories.getFirst();
             BigDecimal share = top.amount().multiply(HUNDRED)
                     .divide(summary.expenses(), 0, RoundingMode.HALF_UP);
@@ -222,6 +249,8 @@ public class ReportService {
                 // change is the share movement in percentage points.
                 String previousShareValue = null;
                 String shareChange = null;
+                String previousShareHint = "";
+                String changeHint = "";
                 ReportRange previousRange = previousRange(period, report.from());
                 ReportSummary previousSummary = buildSummary(userId, period, previousRange);
                 if (previousSummary.expenses().signum() > 0) {
@@ -232,13 +261,16 @@ public class ReportService {
                                 .divide(previousSummary.expenses(), 0, RoundingMode.HALF_UP);
                         previousShareValue = previousShare + "% of spending";
                         shareChange = Integer.toString(share.subtract(previousShare).intValue());
+                        previousShareHint = "the previous value is last period's share of the same category; ";
+                        changeHint = "the change value is how that share moved, in percentage points; ";
                     }
                 }
                 facts.add(new InsightFact("top_category_share",
                         prettyCategory(top.category()),
                         share + "% of spending", previousShareValue,
                         shareChange, InsightType.ACTION,
-                        "the share of this period's total spending that went to the largest category; the previous value is last period's share of the same category; the change value is how that share moved, in percentage points; this is a concentration risk — advise spreading spending across categories, never advise spending more"));
+                        "the fact label is the NAME of the largest spending category — always use that exact name in the body (for example write it as \"your " + prettyCategory(top.category()).toLowerCase() + " spending\"); the value is the share of this period's total spending that went to that category; " + previousShareHint + changeHint
+                        + "this is a concentration — give one tiny, household-friendly tip to spread it (e.g., if Food, cook at home twice this week; if Shopping, delay one small purchase); never advise spending more; keep it plain"));
             }
         }
         ReportSummary previous = buildSummary(userId, period, previousRange(period, report.from()));
@@ -251,6 +283,12 @@ public class ReportService {
                         rupees(summary.expenses()), rupees(previous.expenses()),
                         delta.toString(), InsightType.NEXT,
                         "your total spending this period, with last period's total alongside; the change value is the percentage change between them"));
+            }
+            if (delta.abs().compareTo(FIFTEEN) >= 0) {
+                facts.add(new InsightFact("spending_vs_previous", "Spending vs previous period",
+                        rupees(summary.expenses()), rupees(previous.expenses()),
+                        delta.toString(), InsightType.ACTION,
+                        "how this period's total spending compares to the previous period's total; the previous value is the previous period's total and the change value is the percentage change between them; the change is POSITIVE when spending rose and NEGATIVE when it fell — never invert the sign; say plainly whether spending rose or fell and by how much in rupees; if it rose, give one tiny household tip to bring it down (e.g., cook at home, pause a subscription); if it fell, briefly praise the improvement in one plain sentence a housewife, salaried employee or student would understand"));
             }
         }
         return facts;
@@ -375,6 +413,15 @@ public class ReportService {
         }
     }
 
+    private BigDecimal investedThisPeriod(UUID userId, ReportResponse report) {
+        Instant from = report.from().atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant to = report.to().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Map<TransactionCategory, BigDecimal> totals = new HashMap<>();
+        addCategorySums(totals, categorizedTransactionRepository.sumByCategoryAndTypeBetween(
+                userId, "DEBIT", INVESTMENT_ONLY_EXCLUDED, from, to));
+        return totals.getOrDefault(TransactionCategory.INVESTMENT, BigDecimal.ZERO);
+    }
+
     private BigDecimal netExpenses(UUID userId, ReportRange range) {
         BigDecimal debits = sumByType(userId, range, "DEBIT");
         BigDecimal credits = sumByType(userId, range, "CREDIT");
@@ -429,5 +476,149 @@ public class ReportService {
                 .multiply(HUNDRED)
                 .divide(previousAmount, 0, RoundingMode.HALF_UP)
                 .intValue();
+    }
+
+    private Optional<InsightFact> createBudgetStatusFact(UUID userId, ReportPeriod period,
+                                                         ReportResponse report, ReportSummary summary) {
+        Optional<BigDecimal> periodBudgetOpt = switch (period) {
+            case WEEKLY -> {
+                YearMonth yearMonth = YearMonth.from(report.from());
+                Optional<BigDecimal> monthlyOpt = financeQueryService.getMonthlyBudget(userId, yearMonth.atDay(1));
+                if (monthlyOpt.isEmpty() || monthlyOpt.get().signum() <= 0) yield Optional.empty();
+                long daysInRange = ChronoUnit.DAYS.between(report.from(), report.to()) + 1;
+                BigDecimal weeklyBudget = monthlyOpt.get()
+                        .multiply(BigDecimal.valueOf(daysInRange))
+                        .divide(BigDecimal.valueOf(yearMonth.lengthOfMonth()), 2, RoundingMode.HALF_UP);
+                yield Optional.of(weeklyBudget);
+            }
+            case MONTHLY -> financeQueryService.getMonthlyBudget(userId, report.from());
+            case YEARLY -> {
+                BigDecimal total = BigDecimal.ZERO;
+                boolean found = false;
+                for (int monthIndex = 1; monthIndex <= 12; monthIndex++) {
+                    Optional<BigDecimal> monthlyBudget = financeQueryService.getMonthlyBudget(
+                            userId, LocalDate.of(report.from().getYear(), monthIndex, 1));
+                    if (monthlyBudget.isPresent() && monthlyBudget.get().signum() > 0) {
+                        total = total.add(monthlyBudget.get());
+                        found = true;
+                    }
+                }
+                yield found ? Optional.of(total) : Optional.empty();
+            }
+        };
+        if (periodBudgetOpt.isEmpty() || periodBudgetOpt.get().signum() <= 0) return Optional.empty();
+        BigDecimal periodBudget = periodBudgetOpt.get();
+        BigDecimal spent = summary.expenses();
+        BigDecimal left = periodBudget.subtract(spent);
+        boolean overBudget = left.signum() < 0;
+        String value = rupees(left.abs()) + (overBudget ? " over" : " left");
+        int percentUsed = spent.multiply(HUNDRED)
+                .divide(periodBudget, 0, RoundingMode.HALF_UP).intValue();
+        String previousValue = percentUsed + "% used";
+        String change = String.valueOf(percentUsed);
+        long daysLeft = ChronoUnit.DAYS.between(LocalDate.now(), report.to()) + 1;
+        if (daysLeft < 0) daysLeft = 0;
+        String periodWord = periodWord(period);
+        String hint = "your budget status this " + periodWord + " — the value is how much budget remains"
+                + " (or by how much you are over), the previous value is the percent of the budget already used; "
+                + "there are " + daysLeft + " days left in this " + periodWord + "; "
+                + "speak in rupees left and days left, not just percent; "
+                + (overBudget
+                        ? "you are over budget — give one tiny, household-friendly tip to pause a non-essential spend; "
+                        : percentUsed >= 75
+                                ? "over 75% used — give one tiny tip to stretch the remaining days (e.g., cook at home, delay a small purchase); "
+                                : "")
+                + "keep it to one plain sentence a housewife, salaried employee or student would understand; "
+                + "never mention delta or previous levels";
+        return Optional.of(new InsightFact("budget_status", "Budget left",
+                value, previousValue, change, InsightType.STATUS, hint));
+    }
+
+    private Optional<InsightFact> createUpcomingRecurringFact(UUID userId, ReportPeriod period, ReportResponse report) {
+        YearMonth yearMonth = YearMonth.from(report.from());
+        BigDecimal upcoming = financeQueryService.upcomingRecurringCosts(userId, yearMonth);
+        if (upcoming.signum() <= 0) return Optional.empty();
+        String periodWord = periodWord(period);
+        String hint = "upcoming recurring charges still due this " + periodWord
+                + " (subscriptions, bills, rent or EMI); say the total is already reserved from your budget; "
+                + "keep it short and plain; no advice to spend more";
+        return Optional.of(new InsightFact("upcoming_recurring", "Upcoming bills",
+                rupees(upcoming) + " due", null, null, InsightType.STATUS, hint));
+    }
+
+    private Optional<InsightFact> createBudgetActionFact(UUID userId, ReportPeriod period,
+                                                         ReportResponse report, ReportSummary summary) {
+        Optional<BigDecimal> periodBudgetOpt = switch (period) {
+            case WEEKLY -> {
+                YearMonth yearMonth = YearMonth.from(report.from());
+                Optional<BigDecimal> monthlyOpt = financeQueryService.getMonthlyBudget(userId, yearMonth.atDay(1));
+                if (monthlyOpt.isEmpty() || monthlyOpt.get().signum() <= 0) yield Optional.empty();
+                long daysInRange = ChronoUnit.DAYS.between(report.from(), report.to()) + 1;
+                BigDecimal weeklyBudget = monthlyOpt.get()
+                        .multiply(BigDecimal.valueOf(daysInRange))
+                        .divide(BigDecimal.valueOf(yearMonth.lengthOfMonth()), 2, RoundingMode.HALF_UP);
+                yield Optional.of(weeklyBudget);
+            }
+            case MONTHLY -> financeQueryService.getMonthlyBudget(userId, report.from());
+            case YEARLY -> {
+                BigDecimal total = BigDecimal.ZERO;
+                boolean found = false;
+                for (int monthIndex = 1; monthIndex <= 12; monthIndex++) {
+                    Optional<BigDecimal> monthlyBudget = financeQueryService.getMonthlyBudget(
+                            userId, LocalDate.of(report.from().getYear(), monthIndex, 1));
+                    if (monthlyBudget.isPresent() && monthlyBudget.get().signum() > 0) {
+                        total = total.add(monthlyBudget.get());
+                        found = true;
+                    }
+                }
+                yield found ? Optional.of(total) : Optional.empty();
+            }
+        };
+        if (periodBudgetOpt.isEmpty() || periodBudgetOpt.get().signum() <= 0) return Optional.empty();
+        BigDecimal periodBudget = periodBudgetOpt.get();
+        BigDecimal spent = summary.expenses();
+        int percentUsed = spent.multiply(HUNDRED)
+                .divide(periodBudget, 0, RoundingMode.HALF_UP).intValue();
+        boolean overBudget = spent.compareTo(periodBudget) > 0;
+        if (!overBudget && percentUsed < 70) return Optional.empty();
+        BigDecimal left = periodBudget.subtract(spent);
+        String value = rupees(left.abs()) + (overBudget ? " over budget" : " left");
+        String previousValue = percentUsed + "% of budget used";
+        String change = String.valueOf(percentUsed);
+        String periodWord = periodWord(period);
+        String hint = "your budget is tight this " + periodWord + " — the value is how much budget remains (or over),"
+                + " the previous value is the percent already used; "
+                + (overBudget
+                        ? "you are over — give one tiny household action to get back on track (e.g., pause a small subscription, cook at home); "
+                        : "give one tiny tip to stretch the remaining budget for the rest of the " + periodWord + " (e.g., limit eating out once this week); ")
+                + "keep it to one plain sentence a housewife, salaried employee or student would understand";
+        return Optional.of(new InsightFact("budget_action", "Budget tip",
+                value, previousValue, change, InsightType.ACTION, hint));
+    }
+
+    private Optional<InsightFact> createUpcomingActionFact(UUID userId, ReportPeriod period, ReportResponse report) {
+        YearMonth yearMonth = YearMonth.from(report.from());
+        BigDecimal upcoming = financeQueryService.upcomingRecurringCosts(userId, yearMonth);
+        if (upcoming.signum() <= 0) return Optional.empty();
+        // Only actionable if upcoming is sizable (>20% of monthly budget or >₹1,000)
+        Optional<BigDecimal> budgetOpt = financeQueryService.getMonthlyBudget(userId, report.from());
+        boolean sizable = upcoming.compareTo(BigDecimal.valueOf(1000)) > 0
+                || (budgetOpt.isPresent() && budgetOpt.get().signum() > 0
+                        && upcoming.multiply(HUNDRED).divide(budgetOpt.get(), 0, RoundingMode.HALF_UP).intValue() >= 20);
+        if (!sizable) return Optional.empty();
+        String periodWord = periodWord(period);
+        String hint = "upcoming bills/EMI/rent due this " + periodWord + " that are already reserved; "
+                + "the value is the total due; give one plain tip to prepare (e.g., keep that amount untouched, set a reminder); "
+                + "no advice to spend more";
+        return Optional.of(new InsightFact("upcoming_action", "Upcoming bills tip",
+                rupees(upcoming) + " due soon", null, null, InsightType.ACTION, hint));
+    }
+
+    private String periodWord(ReportPeriod period) {
+        return switch (period) {
+            case WEEKLY -> "week";
+            case MONTHLY -> "month";
+            case YEARLY -> "year";
+        };
     }
 }

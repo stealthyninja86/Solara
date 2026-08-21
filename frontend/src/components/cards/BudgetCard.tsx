@@ -1,30 +1,36 @@
 import { useState } from "react";
-import { useBudget } from "../../hooks/useBudget";
+import { DEFAULT_USER_ID } from "../../constants";
+import { api } from "../../utils/api";
+import { getUserId } from "../../hooks/useAuth";
 import { HowItWorks, type HowItWorksItem } from "../ui/HowItWorks";
 import { Icon } from "../ui/Icon";
 
 interface Props {
-  refreshKey?: number;
-  onBudgetUpdated?: () => void;
+  monthlyBudget: number;
+  totalSpent: number;
   month?: number;
   year?: number;
+  onSaved?: () => void;
 }
 
-export function BudgetCard({ refreshKey = 0, onBudgetUpdated, month, year }: Props) {
-  const {
-    monthlyBudget, totalSpent, remaining,
-    hasBudget, exceeded, setMonthlyBudget,
-  } = useBudget(refreshKey, month, year);
+function toIsoDate(year: number, month: number): string {
+  return `${year}-${String(month + 1).padStart(2, "0")}-01`;
+}
 
+export function BudgetCard({ monthlyBudget, totalSpent, month, year, onSaved }: Props) {
   const [showInput, setShowInput] = useState(false);
   const [inputValue, setInputValue] = useState(String(monthlyBudget || ""));
   const [hover, setHover] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
 
+  const hasBudget = monthlyBudget > 0;
+  const remaining = hasBudget ? monthlyBudget - totalSpent : 0;
+  const exceeded = hasBudget && remaining < 0;
+
   const radius = 48;
   const circumference = 2 * Math.PI * radius;
-  const usagePct = hasBudget && monthlyBudget > 0
+  const usagePct = hasBudget
     ? Math.min(100, (totalSpent / monthlyBudget) * 100)
     : 0;
   const offset = hasBudget
@@ -43,14 +49,32 @@ export function BudgetCard({ refreshKey = 0, onBudgetUpdated, month, year }: Pro
     if (isNaN(val) || val <= 0) return;
     setSaving(true);
     setSaveError(false);
-    const ok = await setMonthlyBudget(val);
-    setSaving(false);
-    if (ok) {
-      setShowInput(false);
-      onBudgetUpdated?.();
-    } else {
+    const now = new Date();
+    const m = month ?? now.getMonth();
+    const y = year ?? now.getFullYear();
+    const at = toIsoDate(y, m);
+    const params = new URLSearchParams({
+      userId: getUserId() ?? DEFAULT_USER_ID,
+      at,
+    });
+    try {
+      const response = await api(`/api/v1/insights/budget?${params}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ budget: val }),
+      });
+      if (response.ok) {
+        setShowInput(false);
+        onSaved?.();
+      } else {
+        setSaveError(true);
+        setTimeout(() => setSaveError(false), 3000);
+      }
+    } catch {
       setSaveError(true);
       setTimeout(() => setSaveError(false), 3000);
+    } finally {
+      setSaving(false);
     }
   }
 

@@ -32,9 +32,9 @@ The answers exist — scattered across bank statements, UPI apps, and credit car
 Solara is a **privacy-first finance platform you can run your way — self-hosted or in the cloud.**
 
 - **Self-hosted** — run the full stack with Docker Compose. Every byte stays on your machine.
-- **Cloud on AWS** — or access the site here through this link : 
+- **Cloud on AWS** — deploy the same stack in the cloud (a lighter AWS tier with AI-assisted features switched off via `app.ai.enabled` is supported).
 
-Import your bank statements, and Solara uses open weight model (qwen3:4b) through ollama categorizes every transaction, tracks your budget, and tells you exactly what's left to spend — no subscription, no SaaS lock-in.
+Import your bank statements, and Solara uses the open-weight model (qwen3.5:4b) through Ollama to categorize every transaction, tracks your budget and recurring payments, and tells you exactly what's left to spend — no subscription, no SaaS lock-in.
 
 ![img_1.png](frontend/images/img_1.png)
 
@@ -51,7 +51,7 @@ Add transactions manually or bulk-import your bank's CSV. Solara auto-detects th
 
 ### Categorize with AI
 
-Every transaction is automatically categorized using a local LLM running on Ollama. Solara uses RAG (Retrieval-Augmented Generation) — it looks up similar past transactions via pgvector embeddings, gives the LLM that context, and validates the result confidence. If the AI isn't sure, it flags the transaction for your review. 13 categories out of the box: Food, Transport, Shopping, Entertainment, Bills, Healthcare, Groceries, Rent, Salary, Investment, Education, Travel, Other.
+Every transaction is automatically categorized using a local LLM running on Ollama. Solara uses RAG (Retrieval-Augmented Generation) — it looks up similar past transactions via pgvector embeddings, gives the LLM that context, and validates the result confidence. If the AI isn't sure, it flags the transaction for your review. 19 categories out of the box: Food & Dining, Transport, Fuel, Shopping, Clothing, Electronics, Entertainment, Bills & Utilities, Healthcare, Groceries, Pets, Rent, Loan EMI, Salary, Investment, Education, Travel, Other, Uncategorized.
 
 ### Know What's Left
 
@@ -64,6 +64,14 @@ Weekly, monthly, and yearly reports built from your categorized transactions, ea
 - **Financial snapshot** — your income, expenses, savings, and savings rate for the period, so you always know the bottom line at a glance.
 - **Category breakdown** — what each category cost you, sorted by spending, with the percentage change vs. the previous period. See at a glance whether dining out is creeping up month over month.
 - **Trend charts** — income vs. expenses plotted day-by-day (weekly report), week-by-week (monthly report), or month-by-month (yearly report).
+
+### Track Recurring Payments
+
+Automatically spot recurring payments from your transactions, or track them explicitly — subscriptions, bills, rent, and EMIs. Every debit is matched against your tracked payments (with a tolerance band for fluctuating bills), the expected next charge rolls forward, and EMIs advance toward paid-off. Status dots and countdowns tell you at a glance which payments are on schedule, late, or exceeded their renewal date.
+
+### AI Overview & Recommendations
+
+Two plain-language surfaces grounded in your own categorized history: the **Overview** narrates what happened with your money this month, the **Recommendations** page tells you what to do next — where to cut spending, review a budget, or clean up uncategorized transactions. Cards refresh daily; hit **Regenerate** (rate-limited) for a fresh take. Disable AI-assisted insights entirely, and everything else — reports, budgets, safe-to-spend — keeps working.
 
 ### Stay in Control
 
@@ -79,7 +87,7 @@ Solara processes **only transaction data** — merchant description, amount, and
 
 ### Open-Weight Models Run Locally by Default
 
-Categorization uses **Qwen3 4B** (open-weight) and **Nomic Embed Text** embeddings via **Ollama** — open-weight models that run **on your own infrastructure**. No proprietary-model vendor sees your transactions. Cloud model providers are entirely optional and **disabled by default** (commented out in config), so nothing leaves your environment unless you deliberately opt in.
+Categorization uses **Qwen3.5 4B** (open-weight) and **Nomic Embed Text** embeddings via **Ollama** — open-weight models that run **on your own infrastructure**. No proprietary-model vendor sees your transactions. Cloud model providers are entirely optional and **disabled by default** (commented out in config), so nothing leaves your environment unless you deliberately opt in.
 
 ### Responsible AI
 
@@ -88,15 +96,15 @@ Categorization uses **Qwen3 4B** (open-weight) and **Nomic Embed Text** embeddin
 
 ### No Lock-In
 
-Run it on your laptop, a Raspberry Pi, or a full AWS account. The data model, the categorizer, and the UI are the same everywhere — switching deployment is a `docker-compose` command away, not a migration project.
+Run it on your laptop, a Raspberry Pi, or a full AWS account. The data model, the categorizer, and the UI are the same everywhere — switching deployment is a `docker compose` command away, not a migration project.
 
 ---
 
 ## Architecture
 
 
-- **3 microservices + API gateway** — each service owns its own PostgreSQL database and talks to others only through Kafka events. No direct service-to-service HTTP calls.
-- **Transactional outbox + CQRS** — transactions publish events through the outbox pattern; the insight service consumes them to build the `categorized_transactions` read model (reports aggregate it directly; monthly-set income & budget live in `budget_settings`). Each service owns its own PostgreSQL database; a separate `analytics_db` keeps reads fast without blocking writes.
+- **3 microservices + API gateway** — each service owns its own PostgreSQL database and talks to others primarily through Kafka events; the only direct HTTP call between services is insight-service fetching a user's settings from auth-service over an internal authenticated endpoint.
+- **Transactional outbox + CQRS** — transactions publish events through the outbox pattern; the insight service consumes them to build the `categorized_transactions` read model (reports aggregate it directly; monthly-set income & budget live in `budget_settings`).
 - **Idempotent consumers** — a `processed_events` table prevents duplicate processing.
 - **Resilience4j** — circuit breakers and retry with exponential backoff on LLM calls, dead-letter queues for poison pills.
 - **Cache stampede protection** — Redis TTLs use ±20% jitter to prevent synchronized expiry thundering on the database.
@@ -112,11 +120,11 @@ Run it on your laptop, a Raspberry Pi, or a full AWS account. The data model, th
 ```bash
 # Prerequisites: Docker Compose, Node.js 20+
 
-git clone https://github.com/stealthyninja86/service_categorizer.git
-cd service_categorizer
+git clone https://github.com/stealthyninja86/Solara.git
+cd Solara
 
 # Start all backend services
-docker-compose up
+docker compose up -d
 
 # In a new terminal — start the frontend
 cd frontend
@@ -126,15 +134,8 @@ npm run dev
 
 Open [http://localhost:5173](http://localhost:5173), register an account, and you're up.
 
-For the full observability stack, add the profile:
-
-```bash
-docker-compose --profile observability up
-```
-
 ---
 
 ## Roadmap
 
-- **Subscription tracking** — automatically spot recurring payments, get upcoming-charge warnings, and see monthly subscription totals in one place.
-- **Personalized recommendations** — plain-language insights on where you could cut spending, grounded in your own categorized transaction history.
+- **Investments section** — a dedicated view for your investments: track SIPs and redemptions over time, see how your portfolio is performing, and keep investing separate from spending at a glance.

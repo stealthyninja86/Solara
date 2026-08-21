@@ -4,39 +4,33 @@ import com.solara.insightservice.dto.response.AiStatusResponse;
 import com.solara.insightservice.dto.response.AvailableDateResponse;
 import com.solara.insightservice.dto.response.InsightCardResponse;
 import com.solara.insightservice.dto.response.ReportResponse;
+import com.solara.insightservice.dto.response.RegenerationStatusResponse;
 import com.solara.insightservice.dto.response.SafeToSpendResponse;
 import com.solara.insightservice.dto.response.SolaraInsightResponse;
 import com.solara.insightservice.dto.response.TrendsResponse;
+import com.solara.insightservice.exception.AiInsightsDisabledException;
 import com.solara.insightservice.model.ReportPeriod;
 import com.solara.insightservice.model.TransactionCategory;
 import com.solara.insightservice.service.insight.InsightGenerator;
+import com.solara.insightservice.service.insight.InsightFacade;
 import com.solara.insightservice.service.finance.FinanceQueryService;
-import com.solara.insightservice.service.insight.surface.OverviewService;
 import com.solara.insightservice.service.ratelimit.RegenerationRateLimiter;
 import com.solara.insightservice.service.report.ReportService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import reactor.core.Disposable;
-
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/v1/insights")
@@ -44,18 +38,18 @@ public class AnalyticsController {
 
     private final FinanceQueryService queryService;
     private final ReportService reportService;
-    private final OverviewService overviewService;
+    private final InsightFacade insightFacade;
     private final InsightGenerator insightGenerator;
     private final RegenerationRateLimiter regenerationRateLimiter;
 
     private static final Logger log = LoggerFactory.getLogger(AnalyticsController.class);
 
     public AnalyticsController(FinanceQueryService queryService, ReportService reportService,
-                               OverviewService overviewService, InsightGenerator insightGenerator,
+                               InsightFacade insightFacade, InsightGenerator insightGenerator,
                                RegenerationRateLimiter regenerationRateLimiter) {
         this.queryService = queryService;
         this.reportService = reportService;
-        this.overviewService = overviewService;
+        this.insightFacade = insightFacade;
         this.insightGenerator = insightGenerator;
         this.regenerationRateLimiter = regenerationRateLimiter;
     }
@@ -64,6 +58,14 @@ public class AnalyticsController {
     public ResponseEntity<AiStatusResponse> aiStatus() {
         log.debug("ai status requested");
         return ResponseEntity.ok(new AiStatusResponse(insightGenerator.isLlmAvailable()));
+    }
+
+    @GetMapping("/regeneration-status")
+    public ResponseEntity<RegenerationStatusResponse> regenerationStatus(@RequestParam UUID userId) {
+        log.debug("regeneration status requested: userId={}", userId);
+        return ResponseEntity.ok(new RegenerationStatusResponse(
+                regenerationRateLimiter.limit(),
+                regenerationRateLimiter.used(userId)));
     }
 
     @GetMapping("/safe-to-spend")
@@ -122,69 +124,14 @@ public class AnalyticsController {
             @RequestParam ReportPeriod period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate at,
             @RequestParam(defaultValue = "false") boolean refresh) {
+        if (!insightFacade.isLlmEnabled(userId)) {
+            log.info("overview rejected: userId={}, llmEnabled=false", userId);
+            throw new AiInsightsDisabledException();
+        }
         if (refresh) {
             regenerationRateLimiter.consume(userId);
         }
-        return ResponseEntity.ok(overviewService.overview(userId, period, at, refresh));
-    }
-
-    @GetMapping(value = "/overview/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter overviewStream(
-            @RequestParam UUID userId,
-            @RequestParam ReportPeriod period,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate at,
-            @RequestParam(defaultValue = "false") boolean refresh) {
-        log.debug("overview stream requested: userId={}, period={}, at={}, refresh={}", userId, period, at, refresh);
-        if (refresh) {
-            regenerationRateLimiter.consume(userId);
-        }
-        SseEmitter emitter = new SseEmitter(300_000L);
-        ScheduledExecutorService heartbeatScheduler =
-                Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
-        Runnable heartbeat = () -> {
-            try {
-                emitter.send(SseEmitter.event().comment("hb"));
-            } catch (IOException e) {
-                emitter.completeWithError(e);
-            }
-        };
-        Disposable subscription = overviewService.overviewStream(userId, period, at, refresh)
-                .subscribe(
-                        card -> {
-                            try {
-                                emitter.send(SseEmitter.event().data(card).name("card"));
-                            } catch (IOException e) {
-                                log.warn("SSE send failed: {}", e.getMessage());
-                                emitter.completeWithError(e);
-                            }
-                        },
-                        emitter::completeWithError,
-                        () -> {
-                            try {
-                                emitter.send(SseEmitter.event().name("done").data("[DONE]"));
-                                emitter.complete();
-                            } catch (IOException e) {
-                                emitter.completeWithError(e);
-                            }
-                        }
-                );
-        heartbeatScheduler.scheduleAtFixedRate(heartbeat, 15, 15, TimeUnit.SECONDS);
-        emitter.onCompletion(() -> {
-            subscription.dispose();
-            heartbeatScheduler.shutdownNow();
-        });
-        emitter.onTimeout(() -> {
-            log.debug("SSE stream timed out: userId={}", userId);
-            subscription.dispose();
-            heartbeatScheduler.shutdownNow();
-            emitter.complete();
-        });
-        emitter.onError(error -> {
-            log.debug("SSE stream errored: userId={}, error={}", userId, error.getMessage());
-            subscription.dispose();
-            heartbeatScheduler.shutdownNow();
-        });
-        return emitter;
+        return ResponseEntity.ok(insightFacade.overview(userId, period, at, refresh));
     }
 
     @GetMapping("/available-dates")

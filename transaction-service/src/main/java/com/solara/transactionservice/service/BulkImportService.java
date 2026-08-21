@@ -126,6 +126,23 @@ public class BulkImportService {
         log.info("Classified CSV roles for job={}: {} (header columns={}, data rows={})",
                 jobId, Arrays.toString(roles), records.get(headerIndex).size(),
                 records.size() - headerIndex - 1);
+        List<String> missingColumns = new ArrayList<>();
+        if (!hasRole(roles, ColumnRole.DATE)) {
+            missingColumns.add("Date");
+        }
+        if (!hasRole(roles, ColumnRole.DESCRIPTION) && !hasRole(roles, ColumnRole.NARRATION) && !hasRole(roles, ColumnRole.MERCHANT)) {
+            missingColumns.add("Description");
+        }
+        if (!hasRole(roles, ColumnRole.AMOUNT) && !hasRole(roles, ColumnRole.DEBIT) && !hasRole(roles, ColumnRole.CREDIT)) {
+            missingColumns.add("Amount");
+        }
+        if (!missingColumns.isEmpty()) {
+            String message = "Missing required column(s): " + String.join(", ", missingColumns)
+                    + ". Please keep the header row with headings like Date, Description, Amount in each file.";
+            log.warn("CSV import failed for job={}: {}", jobId, message);
+            failJob(jobId, 0, 0, message);
+            return;
+        }
         int dataRowCount = records.size() - headerIndex - 1;
         importJobRepository.findById(jobId).ifPresent(job -> {
             job.setTotalRows(dataRowCount);

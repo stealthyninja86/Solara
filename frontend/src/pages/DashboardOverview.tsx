@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getUserId } from "../hooks/useAuth";
 import { useTransactions } from "../hooks/useTransactions";
 import { useTransactionSubmit } from "../hooks/useTransactionSubmit";
-import { useAvailableDates } from "../hooks/useAvailableDates";
-import { useSpendAnalysis } from "../hooks/useSpendAnalysis";
-import { useIncome } from "../hooks/useIncome";
-import { useTrends } from "../hooks/useTrends";
-import { useSubscriptions } from "../hooks/useSubscriptions";
-import { usePullToRefresh } from "../hooks/usePullToRefresh";
+import { useDashboard } from "../hooks/useDashboard";
+// import { usePullToRefresh } from "../hooks/usePullToRefresh"; // temporarily disabled
+import { useBulkImport } from "../hooks/useBulkImport";
+import { getUserId } from "../hooks/useAuth";
+import { api } from "../utils/api";
+import { DEFAULT_USER_ID } from "../constants";
 import { TransactionForm } from "../components/cards/TransactionForm";
-import { BulkImport } from "../components/cards/BulkImport";
 import { SuccessModal } from "../components/modals/SuccessModal";
 import { QuickReviewModal } from "../components/modals/QuickReviewModal";
 import { TransactionTable } from "../components/cards/TransactionTable";
@@ -23,15 +21,25 @@ import { SubscriptionCard } from "../components/cards/SubscriptionCard";
 import { AddSubscriptionModal } from "../components/modals/AddSubscriptionModal";
 import { ManageSubscriptionModal } from "../components/modals/ManageSubscriptionModal";
 import { SubscriptionCostPreviewModal } from "../components/modals/SubscriptionCostPreviewModal";
+import { ImportTipsModal } from "../components/modals/ImportTipsModal";
 import { HowItWorks, type HowItWorksItem } from "../components/ui/HowItWorks";
 import { OnboardingChecklist } from "../components/cards/OnboardingChecklist";
-import { api, streamEvents } from "../utils/api";
-import { DEFAULT_USER_ID } from "../constants";
+import {
+  clearActiveOverview,
+  clearBannerData,
+  consumeScrollToTransactions,
+  HIGHLIGHT_TRANSACTION_KEY,
+  loadActiveOverview,
+  loadBannerData,
+  loadSelectedMonth,
+  persistSelectedMonth,
+  saveActiveOverview,
+  saveHighlightTransactionId,
+  saveScrollToTransactions,
+} from "../utils/storage";
 import { Icon } from "../components/ui/Icon";
 import { FinanceOverview } from "../components/cards/FinanceOverview";
-import type { PageResponse } from "../types";
 import type { TrackedSubscription } from "../types/reports";
-import type { InsightCard } from "../types/reports";
 
 const SAFE_TO_SPEND_HOW_IT_WORKS: HowItWorksItem[] = [
   {
@@ -57,133 +65,26 @@ const KIND_LABEL: Record<string, string> = {
 
 const KIND_ORDER = ["EMI", "RENT", "BILL", "SUBSCRIPTION"];
 
-const ACTIVE_IMPORT_KEY = "solara.active-import.v1";
-const ROW_ESTIMATE_MS = 45 * 1000;
-const MIN_IMPORT_TTL_MS = 15 * 60 * 1000;
-const MAX_IMPORT_TTL_MS = 2 * 60 * 60 * 1000;
-
-function importTtlMs(expectedCount: number): number {
-  return Math.min(MAX_IMPORT_TTL_MS, Math.max(MIN_IMPORT_TTL_MS, expectedCount * ROW_ESTIMATE_MS));
-}
-
-interface ActiveImport {
-  jobId: string;
-  expectedCount: number;
-  baselineCount: number;
-  startedAt: number;
-}
-
-function loadActiveImport(): ActiveImport | null {
-  try {
-    const raw = localStorage.getItem(ACTIVE_IMPORT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as ActiveImport;
-    if (
-      !parsed.jobId ||
-      !Number.isFinite(parsed.expectedCount) ||
-      !Number.isFinite(parsed.baselineCount) ||
-      !Number.isFinite(parsed.startedAt)
-    ) {
-      localStorage.removeItem(ACTIVE_IMPORT_KEY);
-      return null;
-    }
-    if (Date.now() - parsed.startedAt > importTtlMs(parsed.expectedCount)) {
-      localStorage.removeItem(ACTIVE_IMPORT_KEY);
-      return null;
-    }
-    return parsed;
-  } catch {
-    localStorage.removeItem(ACTIVE_IMPORT_KEY);
-    return null;
-  }
-}
-
-function saveActiveImport(activeImport: ActiveImport) {
-  try {
-    localStorage.setItem(ACTIVE_IMPORT_KEY, JSON.stringify(activeImport));
-  } catch {
-    // storage unavailable — degrade to current behavior
-  }
-}
-
-function clearActiveImport() {
-  try {
-    localStorage.removeItem(ACTIVE_IMPORT_KEY);
-  } catch {
-    // ignore
-  }
-}
-
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-const NOW = new Date();
-const STORAGE_KEY = "solara.overview.selected";
-
-function loadSelected(): { year: number; month: number } {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed.year && parsed.month) return parsed;
-    }
-  } catch { /* ignore */ }
-  return { year: NOW.getFullYear(), month: NOW.getMonth() + 1 };
-}
-
-interface BannerData {
-  type: "import" | "single-tx";
-  month: number;
-  year: number;
-  count?: number;
-  transactionId?: string;
-  merchant?: string;
-  amount?: number;
-  createdAt?: string;
-}
-
-function loadBannerData(): BannerData | null {
-  try {
-    const raw = localStorage.getItem("solara.overview.banner");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed.year && parsed.month && parsed.type) return parsed;
-    }
-  } catch { /* ignore */ }
-  return null;
-}
-
-function saveBannerData(data: BannerData) {
-  try {
-    localStorage.setItem("solara.overview.banner", JSON.stringify(data));
-  } catch { /* ignore */ }
-}
-
-function clearBannerData() {
-  try {
-    localStorage.removeItem("solara.overview.banner");
-  } catch { /* ignore */ }
-}
-
-function saveHighlightTransactionId(id: string) {
-  try {
-    localStorage.setItem("solara.highlight.transaction", id);
-  } catch { /* ignore */ }
-}
-
 export function DashboardOverview() {
-  const [budgetKey, setBudgetKey] = useState(0);
   const transactionSubmit = useTransactionSubmit();
   const transactionsManager = useTransactions();
-  const [selected] = useState(loadSelected);
+  const [selected] = useState(loadSelectedMonth);
   const [bannerData, setBannerData] = useState(loadBannerData);
   const [highlightTransactionId, setHighlightTransactionId] = useState<string | null>(null);
+  const [scrollToTransactions, setScrollToTransactions] = useState(false);
+
+  useEffect(() => {
+    if (consumeScrollToTransactions()) setScrollToTransactions(true);
+  }, []);
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("solara.highlight.transaction");
+      const raw = localStorage.getItem(HIGHLIGHT_TRANSACTION_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         setHighlightTransactionId(parsed.transactionId);
@@ -194,38 +95,40 @@ export function DashboardOverview() {
     } catch { /* ignore */ }
   }, []);
 
-  const periods = useAvailableDates(budgetKey);
-
-  const spendAnalysis = useSpendAnalysis(budgetKey, selected.month - 1, selected.year);
-  const income = useIncome(budgetKey);
-  const trends = useTrends(budgetKey, selected.month - 1, selected.year);
-  const subscriptionsManager = useSubscriptions(budgetKey);
+  const dashboard = useDashboard(selected.month - 1, selected.year, false);
+  const {
+    periods,
+    spendAnalysis,
+    income,
+    trends,
+    overviewCards,
+    subscriptions,
+    totalSubscriptions,
+    load: reloadDashboard,
+    loading: dashboardLoading,
+    regenerating: dashboardRegenerating,
+  } = dashboard;
   const [showManualModal, setShowManualModal] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [importStatus, setImportStatus] = useState("");
-  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [manageSubscription, setManageSubscription] = useState<TrackedSubscription | null>(null);
   const [showAddSubscriptionModal, setShowAddSubscriptionModal] = useState(false);
   const [showCostPreviewModal, setShowCostPreviewModal] = useState(false);
-  const [manageSubscription, setManageSubscription] = useState<TrackedSubscription | null>(null);
-  const [importStartedAt, setImportStartedAt] = useState<number | undefined>();
+  const [showImportTipsModal, setShowImportTipsModal] = useState(false);
+
+  useEffect(() => {
+    if (!scrollToTransactions) return;
+    if (!dashboardLoading && !transactionsManager.listLoading) {
+      document.getElementById("transactions-card")?.scrollIntoView({ behavior: "smooth" });
+      setScrollToTransactions(false);
+    }
+  }, [scrollToTransactions, dashboardLoading, transactionsManager.listLoading]);
+
+  const bulkImport = useBulkImport();
+
   const [generatingOverview, setGeneratingOverview] = useState(false);
   const [generateError, setGenerateError] = useState("");
-  const [streamingCards, setStreamingCards] = useState<InsightCard[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    const activeImport = loadActiveImport();
-    if (activeImport) resumeActiveImport(activeImport);
-    // run once on mount; getUserId() is a module-level read, safe before auth settles
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const regeneratePollRef = useRef<number | null>(null);
+  const regenerateAttemptsRef = useRef(0);
+  const regenerateWasEmptyRef = useRef(false);
 
   useEffect(() => {
     const fromMonth = String(selected.month).padStart(2, "0");
@@ -237,8 +140,7 @@ export function DashboardOverview() {
   }, [selected]);
 
   function persist(next: { year: number; month: number }) {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
-    window.location.reload();
+    persistSelectedMonth(next);
   }
 
   const currentIndex = periods.findIndex(
@@ -250,270 +152,118 @@ export function DashboardOverview() {
     if (next) persist(next);
   }
 
-  async function readModelCount(): Promise<number | null> {
-    try {
-      const params = new URLSearchParams();
-      params.set("userId", getUserId() ?? DEFAULT_USER_ID);
-      params.set("page", "0");
-      params.set("size", "1");
-      const res = await api(`/api/v1/category/transaction?${params}`);
-      if (!res.ok) return null;
-      const data: PageResponse = await res.json();
-      return data.totalElements;
-    } catch {
-      return null;
-    }
-  }
-
-  function startReadModelPolling(expectedCount: number, baselineCount: number, jobId: string, startedAt: number) {
-    setImportStatus("Processing transactions\u2026");
-    if (pollingRef.current) clearInterval(pollingRef.current);
-    pollingRef.current = setInterval(async () => {
-      if (Date.now() - startedAt > importTtlMs(expectedCount)) {
-        if (pollingRef.current) clearInterval(pollingRef.current);
-        clearActiveImport();
-        setImporting(false);
-        setImportStatus("Import is taking longer than expected. Please try again.");
-        setTimeout(() => setImportStatus(""), 4000);
-        return;
-      }
-      try {
-        let job: { status: string; minDate?: string; maxDate?: string } | null = null;
-        const jobRes = await api(`/api/v1/transactions/bulk/${jobId}?userId=${getUserId() ?? DEFAULT_USER_ID}`);
-        if (jobRes.ok) {
-          job = await jobRes.json();
-          if (job!.status === "FAILED") {
-            if (pollingRef.current) clearInterval(pollingRef.current);
-            clearActiveImport();
-            setImporting(false);
-            setImportStatus("Import failed. Please try again.");
-            setTimeout(() => setImportStatus(""), 3000);
-            return;
-          }
-        }
-        const total = await readModelCount();
-        if (total === null) return;
-        const categorized = Math.min(total - baselineCount, expectedCount);
-        setImportStatus(`Processing\u2026 ${categorized}/${expectedCount} rows processed`);
-        if (total - baselineCount >= expectedCount) {
-          if (pollingRef.current) clearInterval(pollingRef.current);
-          clearActiveImport();
-          setImporting(false);
-          setImportStatus("");
-          // Use date range from the import job response, fallback to available-dates
-          if (job?.minDate && job?.maxDate) {
-            const min = new Date(job.minDate);
-            const max = new Date(job.maxDate);
-            const sameMonth = min.getFullYear() === max.getFullYear() && min.getMonth() === max.getMonth();
-            if (sameMonth) {
-              saveBannerData({ type: "import", month: min.getMonth() + 1, year: min.getFullYear(), count: expectedCount });
-            } else {
-              saveBannerData({ type: "import", month: max.getMonth() + 1, year: max.getFullYear(), count: expectedCount });
-            }
-          } else {
-            try {
-              const userId = getUserId() ?? DEFAULT_USER_ID;
-              const datesRes = await api(`/api/v1/insights/available-dates?userId=${userId}`);
-              if (datesRes.ok) {
-                const dates: Array<{ year: number; month: number }> = await datesRes.json();
-                const latest = dates[0];
-                if (latest) saveBannerData({ type: "import", month: latest.month, year: latest.year, count: expectedCount });
-              }
-            } catch { /* ignore */ }
-          }
-          setShowReviewModal(true);
-          transactionsManager.fetchTransactions(0);
-        }
-      } catch {
-        // retry on next tick
-      }
-    }, 2000);
-  }
-
-  async function resumeActiveImport(activeImport: ActiveImport) {
-    const { jobId, baselineCount, startedAt } = activeImport;
-    setImportStartedAt(startedAt);
-    setImporting(true);
-    setImportStatus("Resuming import\u2026");
-    try {
-      const jobRes = await api(`/api/v1/transactions/bulk/${jobId}?userId=${getUserId() ?? DEFAULT_USER_ID}`);
-      if (!jobRes.ok) {
-        clearActiveImport();
-        setImporting(false);
-        setImportStatus("");
-        return;
-      }
-      const job = await jobRes.json();
-      if (job.status === "FAILED") {
-        clearActiveImport();
-        setImporting(false);
-        setImportStatus("Import failed. Please try again.");
-        setTimeout(() => setImportStatus(""), 3000);
-        return;
-      }
-      if (job.status !== "COMPLETED") {
-        clearActiveImport();
-        setImporting(false);
-        setImportStatus("");
-        return;
-      }
-      const authoritativeExpected = job.importedRows;
-      const total = await readModelCount();
-      if (total === null) {
-        setImporting(false);
-        setImportStatus("");
-        return;
-      }
-      if (total - baselineCount >= authoritativeExpected) {
-        clearActiveImport();
-        setImporting(false);
-        // Use date range from the import job response, fallback to available-dates
-        if (job?.minDate && job?.maxDate) {
-          const min = new Date(job.minDate);
-          const max = new Date(job.maxDate);
-          const sameMonth = min.getFullYear() === max.getFullYear() && min.getMonth() === max.getMonth();
-          if (sameMonth) {
-            saveBannerData({ type: "import", month: min.getMonth() + 1, year: min.getFullYear(), count: authoritativeExpected });
-          } else {
-            saveBannerData({ type: "import", month: max.getMonth() + 1, year: max.getFullYear(), count: authoritativeExpected });
-          }
-        } else {
-          try {
-            const userId = getUserId() ?? DEFAULT_USER_ID;
-            const datesRes = await api(`/api/v1/insights/available-dates?userId=${userId}`);
-            if (datesRes.ok) {
-              const dates: Array<{ year: number; month: number }> = await datesRes.json();
-              const latest = dates[0];
-              if (latest) saveBannerData({ type: "import", month: latest.month, year: latest.year, count: authoritativeExpected });
-            }
-          } catch { /* ignore */ }
-        }
-        setShowReviewModal(true);
-        transactionsManager.fetchTransactions(0);
-      } else {
-        startReadModelPolling(authoritativeExpected, baselineCount, jobId, startedAt);
-      }
-    } catch {
-      setImporting(false);
-      setImportStatus("");
-    }
-  }
-
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-
-    setImporting(true);
-    setImportStatus("Uploading\u2026");
-
-    const measuredBaseline = await readModelCount();
-    const baselineCount = measuredBaseline ?? 0;
-
-    const formData = new FormData();
-    formData.append("userId", getUserId() ?? DEFAULT_USER_ID);
-    formData.append("file", file);
-
-    try {
-      const response = await api("/api/v1/transactions/bulk/upload", { method: "POST", body: formData });
-      if (!response.ok) throw new Error("Upload failed");
-      const data = await response.json();
-      setImportStatus("Processing transactions\u2026");
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      pollingRef.current = setInterval(async () => {
-        try {
-          const pollRes = await api(`/api/v1/transactions/bulk/${data.jobId}?userId=${getUserId() ?? DEFAULT_USER_ID}`);
-          if (pollRes.ok) {
-            const status = await pollRes.json();
-            if (status.status === "COMPLETED") {
-              if (pollingRef.current) clearInterval(pollingRef.current);
-              const expectedCount = status.importedRows;
-              if (expectedCount <= 0) {
-                setImporting(false);
-                setImportStatus("No rows were imported from the file.");
-                setTimeout(() => setImportStatus(""), 3000);
-                return;
-              }
-              const startedAt = Date.now();
-              setImportStartedAt(startedAt);
-              saveActiveImport({ jobId: data.jobId, expectedCount, baselineCount, startedAt });
-              startReadModelPolling(expectedCount, baselineCount, data.jobId, startedAt);
-            } else if (status.status === "FAILED") {
-              if (pollingRef.current) clearInterval(pollingRef.current);
-              setImporting(false);
-              setImportStatus("Import failed. Please try again.");
-              setTimeout(() => setImportStatus(""), 3000);
-            }
-          }
-        } catch {
-          // retry on next interval
-        }
-      }, 1500);
-    } catch {
-      setImporting(false);
-      setImportStatus("Upload failed. Please try again.");
-      setTimeout(() => setImportStatus(""), 3000);
-    }
-  }
-
-  const handleRefresh = useCallback(() => {
-    window.location.reload();
-  }, []);
+  // Pull-to-refresh temporarily disabled (see usePullToRefresh).
+  // const handleRefresh = useCallback(() => {
+  //   window.location.reload();
+  // }, []);
 
   const handleGenerateOverview = useCallback((refresh = false) => {
+    if (regeneratePollRef.current !== null) {
+      window.clearInterval(regeneratePollRef.current);
+      regeneratePollRef.current = null;
+    }
+    regenerateAttemptsRef.current = 0;
+    regenerateWasEmptyRef.current = false;
     setGeneratingOverview(true);
     setGenerateError("");
-    setStreamingCards([]);
     const userId = getUserId() ?? DEFAULT_USER_ID;
     const now = new Date();
     const at = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    saveActiveOverview({ at, startedAt: Date.now() });
     const force = refresh ? "&refresh=true" : "";
-    const url = `/api/v1/insights/overview/stream?userId=${userId}&period=MONTHLY&at=${at}${force}`;
-    streamEvents(url, {
-      onEvent: (event, data) => {
-        if (event === "card") {
-          try {
-            const card = JSON.parse(data) as InsightCard;
-            setStreamingCards((prev) => [...prev, card]);
-          } catch { /* ignore malformed events */ }
-        }
-      },
-      onDone: () => {
-        setBudgetKey((k) => k + 1);
-        setStreamingCards([]);
-        setGeneratingOverview(false);
-      },
-      onError: (status) => {
-        if (status === 429) {
-          setGenerateError("Regeneration limit reached — try again tomorrow.");
-          setStreamingCards([]);
+    api(`/api/v1/insights/overview?userId=${userId}&period=MONTHLY&at=${at}${force}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          if (res.status === 429) {
+            setGenerateError("Regeneration limit reached — try again tomorrow.");
+          } else {
+            throw new Error("Generation failed");
+          }
+          clearActiveOverview();
           setGeneratingOverview(false);
           return;
         }
-        // Fallback to the non-streaming JSON endpoint (option 3) — only
-        // surface an error if that fails too.
-        api(`/api/v1/insights/overview?userId=${userId}&period=MONTHLY&at=${at}${force}`)
-          .then((res) => (res.ok ? res.json() : null))
-          .then((data: InsightCard[] | null) => {
-            if (data && data.length > 0) {
-              setBudgetKey((k) => k + 1);
+        // Trigger first dashboard reload, then poll until cards appear (async generation)
+        await reloadDashboard();
+        regeneratePollRef.current = window.setInterval(async () => {
+          regenerateAttemptsRef.current += 1;
+          if (regenerateAttemptsRef.current > 30) {
+            if (regeneratePollRef.current !== null) {
+              window.clearInterval(regeneratePollRef.current);
+              regeneratePollRef.current = null;
             }
-          })
-          .catch(() => {
-            setGenerateError("Generation failed. Please try again.");
-          })
-          .finally(() => {
-            setStreamingCards([]);
+            regenerateWasEmptyRef.current = false;
+            clearActiveOverview();
             setGeneratingOverview(false);
-          });
-      },
-    });
+            return;
+          }
+          await reloadDashboard();
+        }, 3000);
+      })
+      .catch(() => {
+        setGenerateError("Generation failed. Please try again.");
+        if (regeneratePollRef.current !== null) {
+          window.clearInterval(regeneratePollRef.current);
+          regeneratePollRef.current = null;
+        }
+        regenerateWasEmptyRef.current = false;
+        clearActiveOverview();
+        setGeneratingOverview(false);
+      });
+  }, [reloadDashboard]);
+
+  useEffect(() => {
+    if (generatingOverview && overviewCards.length === 0) {
+      regenerateWasEmptyRef.current = true;
+    }
+    if (generatingOverview && regenerateWasEmptyRef.current && overviewCards.length > 0) {
+      if (regeneratePollRef.current !== null) {
+        window.clearInterval(regeneratePollRef.current);
+        regeneratePollRef.current = null;
+      }
+      regenerateAttemptsRef.current = 0;
+      regenerateWasEmptyRef.current = false;
+      clearActiveOverview();
+      setGeneratingOverview(false);
+    }
+  }, [overviewCards, generatingOverview]);
+
+  useEffect(() => {
+    const active = loadActiveOverview();
+    if (active) {
+      setGeneratingOverview(true);
+      regenerateAttemptsRef.current = Math.floor((Date.now() - active.startedAt) / 3000);
+      regeneratePollRef.current = window.setInterval(async () => {
+        regenerateAttemptsRef.current += 1;
+        if (regenerateAttemptsRef.current > 30) {
+          if (regeneratePollRef.current !== null) {
+            window.clearInterval(regeneratePollRef.current);
+            regeneratePollRef.current = null;
+          }
+          regenerateWasEmptyRef.current = false;
+          clearActiveOverview();
+          setGeneratingOverview(false);
+          return;
+        }
+        await reloadDashboard();
+      }, 3000);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { pullRef } = usePullToRefresh(handleRefresh, transactionsManager.setPullRefreshing);
+  useEffect(() => {
+    return () => {
+      if (regeneratePollRef.current !== null) {
+        window.clearInterval(regeneratePollRef.current);
+      }
+    };
+  }, []);
+
+  // Pull-to-refresh temporarily disabled (see usePullToRefresh).
+  // const { pullRef } = usePullToRefresh(handleRefresh, transactionsManager.setPullRefreshing);
 
   return (
-    <div ref={pullRef} style={{ width: "100%" }} className="flex flex-col gap-8">
+    <div style={{ width: "100%" }} className="flex flex-col gap-8">
 
       {/* Success Banner */}
       {bannerData && (
@@ -528,12 +278,10 @@ export function DashboardOverview() {
             <button
               onClick={() => {
                 if (bannerData.transactionId) saveHighlightTransactionId(bannerData.transactionId);
+                saveScrollToTransactions();
                 persist({ year: bannerData.year, month: bannerData.month });
                 clearBannerData();
                 setBannerData(null);
-                setTimeout(() => {
-                  document.getElementById("transactions-card")?.scrollIntoView({ behavior: "smooth" });
-                }, 100);
               }}
               className="button !w-auto !px-3 !py-1.5 !text-caption"
             >
@@ -561,18 +309,18 @@ export function DashboardOverview() {
               <Icon name="add" size={12} /> Add
             </button>
             <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={importing}
+              onClick={() => setShowImportTipsModal(true)}
+              disabled={bulkImport.importing}
               className="button flex items-center gap-1.5 !px-3 !py-1.5 !text-[0.75rem] text-[var(--color-text-secondary)]!"
             >
-              {importing ? <><span className="spinner !w-2.5 !h-2.5" /> {importStatus || "Importing\u2026"}</> : <><Icon name="import" size={12} /> Import</>}
+              {bulkImport.importing ? <><span className="spinner !w-2.5 !h-2.5" /> {bulkImport.importStatus || "Importing\u2026"}</> : <><Icon name="import" size={12} /> Import</>}
             </button>
             <input
-              ref={fileInputRef}
+              ref={bulkImport.fileInputRef}
               type="file"
               accept=".csv"
               style={{ display: "none" }}
-              onChange={handleFileChange}
+              onChange={bulkImport.handleFileChange}
             />
           </div>
         </div>
@@ -811,11 +559,12 @@ export function DashboardOverview() {
       <FinanceOverview
         month={selected.month - 1}
         year={selected.year}
-        refreshKey={budgetKey}
+        cards={overviewCards}
+        loading={dashboardLoading}
         transactionCount={transactionsManager.transactions.length}
-        generating={generatingOverview}
+        generating={generatingOverview || dashboardRegenerating}
+        regenerating={dashboardRegenerating}
         generateError={generateError}
-        streamingCards={streamingCards}
         onGenerate={handleGenerateOverview}
         onRegenerate={() => handleGenerateOverview(true)}
       />
@@ -823,8 +572,8 @@ export function DashboardOverview() {
 
       <div id="subscriptions-card" className="self-center max-w-[1000px] w-full" style={{ "--card-delay": "200ms" } as React.CSSProperties}>
         <SubscriptionCard
-          subscriptions={subscriptionsManager.subscriptions}
-          totalAnnual={subscriptionsManager.totalSubscriptions}
+          subscriptions={subscriptions}
+          totalAnnual={totalSubscriptions}
           onTrack={() => setShowAddSubscriptionModal(true)}
           onEstimate={() => setShowCostPreviewModal(true)}
           onManage={setManageSubscription}
@@ -836,7 +585,7 @@ export function DashboardOverview() {
         onClose={() => setShowAddSubscriptionModal(false)}
         onSaved={() => {
           setShowAddSubscriptionModal(false);
-          setBudgetKey((previous) => previous + 1);
+          reloadDashboard();
         }}
       />
 
@@ -845,7 +594,7 @@ export function DashboardOverview() {
         onClose={() => setManageSubscription(null)}
         onSaved={() => {
           setManageSubscription(null);
-          setBudgetKey((previous) => previous + 1);
+          reloadDashboard();
         }}
       />
 
@@ -854,9 +603,15 @@ export function DashboardOverview() {
         onClose={() => setShowCostPreviewModal(false)}
       />
 
+      <ImportTipsModal
+        visible={showImportTipsModal}
+        onClose={() => setShowImportTipsModal(false)}
+        onChooseFile={() => bulkImport.fileInputRef.current?.click()}
+      />
+
       <div className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-3" style={{ width: "100%", maxWidth: "1000px", margin: "0 auto" }}>
-        <div id="income-card" style={{ "--card-delay": "240ms" } as React.CSSProperties}><IncomeCard refreshKey={budgetKey} totalSpend={trends.totalSpend} month={selected.month - 1} year={selected.year} /></div>
-        <div id="budget-card" style={{ "--card-delay": "320ms" } as React.CSSProperties}><BudgetCard refreshKey={budgetKey} onBudgetUpdated={() => setBudgetKey((previous) => previous + 1)} month={selected.month - 1} year={selected.year} /></div>
+        <div id="income-card" style={{ "--card-delay": "240ms" } as React.CSSProperties}><IncomeCard monthlyIncome={income.monthlyIncome} hasIncome={income.hasIncome} totalSpend={trends.totalSpend} month={selected.month - 1} year={selected.year} onSaved={reloadDashboard} /></div>
+        <div id="budget-card" style={{ "--card-delay": "320ms" } as React.CSSProperties}><BudgetCard monthlyBudget={spendAnalysis.monthlyBudget} totalSpent={spendAnalysis.totalSpent} month={selected.month - 1} year={selected.year} onSaved={reloadDashboard} /></div>
         <div style={{ "--card-delay": "400ms" } as React.CSSProperties}><SpendingCard categories={trends.categories} totalSpend={trends.totalSpend} /></div>
       </div>
 
@@ -865,7 +620,7 @@ export function DashboardOverview() {
       </div>
 
       <div id="transactions-card" className="self-center max-w-[1000px] w-full">
-        <TransactionTable state={transactionsManager} onDelete={() => setBudgetKey((previous) => previous + 1)} subscriptions={subscriptionsManager.subscriptions} highlightTransactionId={highlightTransactionId} onRowClick={(tx) => transactionSubmit.openDetailModal(tx)} />
+        <TransactionTable state={transactionsManager} onDelete={reloadDashboard} subscriptions={subscriptions} highlightTransactionId={highlightTransactionId} onRowClick={(tx) => transactionSubmit.openDetailModal(tx)} />
       </div>
 
       <SuccessModal
@@ -875,8 +630,24 @@ export function DashboardOverview() {
         }
         createdTransaction={transactionSubmit.createdTransaction}
         onDone={() => {
-          transactionSubmit.dismissSuccessModal(transactionsManager.fetchTransactions);
-            setBudgetKey((previous) => previous + 1);
+          transactionSubmit.dismissSuccessModal();
+          saveScrollToTransactions();
+          window.location.reload();
+        }}
+      />
+
+      <SuccessModal
+        visible={bulkImport.showImportSuccessModal}
+        title="Import Complete"
+        message="Your transactions have been imported successfully."
+        details={bulkImport.importSuccess ? [
+          { label: "Transactions imported", value: String(bulkImport.importSuccess.count) },
+          { label: "For", value: `${MONTHS[bulkImport.importSuccess.month - 1]} ${bulkImport.importSuccess.year}` },
+        ] : []}
+        onDone={() => {
+          bulkImport.dismissImportSuccessModal();
+          saveScrollToTransactions();
+          window.location.reload();
         }}
       />
 
@@ -908,10 +679,9 @@ export function DashboardOverview() {
         onClose={() => transactionSubmit.setShowQuickReviewModal()}
       />
 
-      <BulkImport visible={showReviewModal} onClose={() => { setShowReviewModal(false); window.location.reload(); }} importStartedAt={importStartedAt} onDelete={() => {
-        setBudgetKey((previous) => previous + 1);
-        transactionsManager.fetchTransactions(transactionsManager.currentPage);
-      }} />
+      
+
+      
 
       {showManualModal && (
         <Modal visible={showManualModal} onClose={() => setShowManualModal(false)} titleId="manual-entry-title" className="modal relative">

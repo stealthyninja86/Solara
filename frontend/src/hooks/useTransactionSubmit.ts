@@ -182,10 +182,12 @@ export function useTransactionSubmit() {
           body: JSON.stringify(txBody),
         }));
       }
-      if (selectedCategory || reviewDescription.trim()) {
-        const catBody: Record<string, string> = {};
-        if (selectedCategory) catBody.category = selectedCategory.trim();
+      if (selectedCategory || reviewDescription.trim() || reviewData?.category) {
+        const catBody: Record<string, string | boolean> = {};
+        const categoryToSave = selectedCategory || reviewData?.category || "";
+        if (categoryToSave) catBody.category = categoryToSave;
         if (reviewDescription.trim()) catBody.description = reviewDescription.trim();
+        catBody.needsReview = false;
         promises.push(api(`/api/v1/category/transaction/${pendingTransactionId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -277,9 +279,9 @@ export function useTransactionSubmit() {
     }
   }
 
-  function dismissSuccessModal(refresh: (page: number) => Promise<void>) {
+  function dismissSuccessModal(refresh?: (page: number) => Promise<void>) {
     setShowSuccessModal(false);
-    refresh(0);
+    refresh?.(0);
   }
 
   function dismissQuickReview() {
@@ -315,7 +317,7 @@ export function useTransactionSubmit() {
           body: JSON.stringify({
             merchant: editMerchant.trim(),
             description: reviewDescription.trim(),
-            category: selectedCategory.trim(),
+            ...(selectedCategory.trim() ? { category: selectedCategory.trim() } : {}),
           }),
         }
       );

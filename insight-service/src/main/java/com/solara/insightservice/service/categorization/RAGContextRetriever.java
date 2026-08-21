@@ -19,6 +19,7 @@ public class RAGContextRetriever {
 
     private final MerchantProfileRepository merchantProfileRepository;
     private final EmbeddingModel embeddingModel;
+    private final boolean aiEnabled;
 
     @Value("${app.rag.min-history:30}")
     private int minHistory;
@@ -30,15 +31,21 @@ public class RAGContextRetriever {
     private double minSimilarity;
 
     public RAGContextRetriever(MerchantProfileRepository merchantProfileRepository,
-                               EmbeddingModel embeddingModel) {
+                               EmbeddingModel embeddingModel,
+                               @Value("${app.ai.enabled:true}") boolean aiEnabled) {
         this.merchantProfileRepository = merchantProfileRepository;
         this.embeddingModel = embeddingModel;
+        this.aiEnabled = aiEnabled;
     }
 
     public List<SimilarCategorization> findSimilar(UUID userId, String merchant, String normalizedMerchant,
                                                    boolean isBulkImport) {
         long start = System.currentTimeMillis();
         try {
+            if (!aiEnabled) {
+                log.debug("AI disabled (app.ai.enabled=false) — RAG skipped: userId={}", userId);
+                return List.of();
+            }
             if (merchantProfileRepository.countByUserId(userId) < minHistory) {
                 log.debug("RAG skipped (below minHistory={}): userId={}", minHistory, userId);
                 return List.of();
