@@ -3,7 +3,7 @@ kind: ClusterConfig
 metadata:
   name: solara-demo
   region: us-east-1
-  version: "1.30"
+  version: "1.33"
   tags:
     project: solara
     tier: demo
