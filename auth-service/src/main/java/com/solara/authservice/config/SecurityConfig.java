@@ -29,7 +29,7 @@ public class SecurityConfig {
     @Order(1)
     public SecurityFilterChain publicEndpoints(HttpSecurity http) throws Exception {
         http
-                .securityMatcher("/auth/register", "/auth/login", "/auth/token", "/auth/logout")
+                .securityMatcher("/auth/register", "/auth/login", "/auth/token", "/auth/logout", "/.well-known/jwks.json", "/actuator/**")
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
