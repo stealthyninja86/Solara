@@ -1,6 +1,6 @@
 # .github/workflows/deploy.yml
-# Solara CI/CD — PHASE 1 (verify first): build+test on every PR and push to the
-# production branch.
+# Solara CI/CD — PHASE 1 (verify first): build+test on every PR and push to
+# main and production branches.
 #
 # The deploy-to-demo story lives in `make deploy` (infrastructure/demo/Makefile):
 # the demo SG opens SSH only to the operator's IP, so GitHub runners cannot reach
@@ -8,14 +8,13 @@
 # The AWS stages (build-image -> migrate -> deploy to ECR/EKS) are the P2 story
 # (aws_deployment_tutorial.md §P) and are NOT active today.
 #
-# This workflow file exists ONLY on the production branch (main intentionally has
-# no workflows — ea91877) and GitHub runs it only for branches it is pushed to,
-# so the filter below must match this file's own branch: production.
+# This workflow now lives on main (restored f73fc93) and production; GitHub runs it
+# only for branches it is pushed to, so the filter below matches both.
 name: Deploy Solara
 
 on:
   push:
-    branches: [ "production" ]
+    branches: [ "main", "production" ]
   pull_request:
   workflow_dispatch:
 
