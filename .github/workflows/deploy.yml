@@ -1,15 +1,11 @@
 # .github/workflows/deploy.yml
-# Solara CI/CD — PHASE 1 (verify first): build+test on every PR and push to
-# main and production branches.
+# Solara CI/CD — Phase 1 (build-test) + Phase 2 (build-and-push to ECR).
 #
-# The deploy-to-demo story lives in `make deploy` (infrastructure/demo/Makefile):
-# the demo SG opens SSH only to the operator's IP, so GitHub runners cannot reach
-# the host — automated deploy was deliberately dropped (demo_deployment.md §7).
-# The AWS stages (build-image -> migrate -> deploy to ECR/EKS) are the P2 story
-# (aws_deployment_tutorial.md §P) and are NOT active today.
+# Phase 1: build+test on every PR and push to main/production.
+# Phase 2: build Docker images and push to ECR (main only, after build-test passes).
+#          Needs IAM role `github-solara-ecr` (OIDC, one-time root console setup — §6.3).
 #
-# This workflow now lives on main (restored f73fc93) and production; GitHub runs it
-# only for branches it is pushed to, so the filter below matches both.
+# This workflow lives on main and production; GitHub runs it only for branches it is pushed to.
 name: Deploy Solara
 
 on:
@@ -49,3 +45,36 @@ jobs:
         # Tests are deferred (JUnit/Mockito/Testcontainers land later). The moment the test
         # suites land, flip to `./mvnw verify` and delete the skip flag.
         run: ./mvnw package -Dmaven.test.skip=true
+
+  build-and-push:
+    name: build-and-push (${{ matrix.service }})
+    needs: build-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write                   # OIDC — lets GitHub assume the IAM role without a password
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - api-gateway
+          - auth-service
+          - transaction-service
+          - insight-service
+          - frontend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4
+        with:
+          role-to-assume: arn:aws:iam::609394381484:role/github-solara-ecr
+          aws-region: us-east-1
+      - uses: aws-actions/amazon-ecr-login@0ec24d3550b40b8e15a277211f3e7f6b3f684e96 # v2
+      - name: Build and push
+        env:
+          REGISTRY: 609394381484.dkr.ecr.us-east-1.amazonaws.com
+          TAG: ${{ github.sha }}
+        run: |
+          docker build -t $REGISTRY/solara/${{ matrix.service }}:$TAG -t $REGISTRY/solara/${{ matrix.service }}:latest ./${{ matrix.service }}
+          docker push $REGISTRY/solara/${{ matrix.service }}:$TAG
+          docker push $REGISTRY/solara/${{ matrix.service }}:latest

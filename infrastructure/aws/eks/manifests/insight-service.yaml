@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: insight-service
+  labels:
+    app: insight-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: insight-service
+  template:
+    metadata:
+      labels:
+        app: insight-service
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: insight-service
+          image: 609394381484.dkr.ecr.us-east-1.amazonaws.com/solara/insight-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4003
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "prod"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://insight-db:5432/db"
+            - name: APP_AI_ENABLED
+              value: "false"
+            - name: APP_CATEGORIZATION_SKIP_AI
+              value: "true"
+            - name: APP_MERCHANT_PROFILE_SYNC_ENABLED
+              value: "false"
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka:9092"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0"
+          envFrom:
+            - secretRef:
+                name: solara-secrets
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 4003
+            failureThreshold: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 4003
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 4003
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: insight-service
+  labels:
+    app: insight-service
+spec:
+  type: NodePort
+  selector:
+    app: insight-service
+  ports:
+    - port: 4003
+      targetPort: 4003
+      nodePort: 30403

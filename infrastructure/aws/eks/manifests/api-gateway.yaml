@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  labels:
+    app: api-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4000"
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: api-gateway
+          image: 609394381484.dkr.ecr.us-east-1.amazonaws.com/solara/api-gateway:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 4000
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "prod"
+            - name: SPRING_THREADS_VIRTUAL_ENABLED
+              value: "true"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0"
+            - name: RESILIENCE4J_TIMELIMITER_INSTANCES_AUTHSERVICE_CB_TIMEOUT_DURATION
+              value: "5s"
+            - name: RESILIENCE4J_TIMELIMITER_INSTANCES_TRANSACTIONSERVICE_CB_TIMEOUT_DURATION
+              value: "15s"
+            - name: RESILIENCE4J_TIMELIMITER_INSTANCES_INSIGHTSERVICE_CB_TIMEOUT_DURATION
+              value: "60s"
+          envFrom:
+            - secretRef:
+                name: solara-secrets
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 4000
+            failureThreshold: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 4000
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 4000
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  labels:
+    app: api-gateway
+spec:
+  type: NodePort
+  selector:
+    app: api-gateway
+  ports:
+    - name: http
+      port: 4000
+      targetPort: 4000
+      nodePort: 30400
+      protocol: TCP

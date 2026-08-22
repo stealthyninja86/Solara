@@ -1,0 +1,19 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: solara-demo
+  region: us-east-1
+  version: "1.30"
+  tags:
+    project: solara
+    tier: demo
+    cost-center: interview
+managedNodeGroups:
+  - name: solara-ng
+    instanceType: t4g.medium
+    desiredCapacity: 1
+    minSize: 1
+    maxSize: 1
+    volumeSize: 20
+    volumeType: gp3
+    privateNetworking: false
