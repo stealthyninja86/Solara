@@ -23,7 +23,6 @@ WORKDIR /app
 
 # Copy JAR from builder stage
 COPY --from=builder /app/target/api-gateway-0.0.1-SNAPSHOT.jar app.jar
-COPY src/main/resources/keys/public.pem keys/public.pem
 
 # Expose port
 EXPOSE 4000
