@@ -65,7 +65,7 @@ jobs:
           - frontend
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: aws-actions/configure-aws-credentials@e6de054f838133194afecd5d5e7a70e2be676009 # v6.2.3
+      - uses: aws-actions/configure-aws-credentials@v6.2.3
         with:
           role-to-assume: arn:aws:iam::609394381484:role/github-solara-ecr
           aws-region: us-east-1
