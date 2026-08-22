@@ -65,11 +65,11 @@ jobs:
           - frontend
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4
+      - uses: aws-actions/configure-aws-credentials@e6de054f838133194afecd5d5e7a70e2be676009 # v6.2.3
         with:
           role-to-assume: arn:aws:iam::609394381484:role/github-solara-ecr
           aws-region: us-east-1
-      - uses: aws-actions/amazon-ecr-login@0ec24d3550b40b8e15a277211f3e7f6b3f684e96 # v2
+      - uses: aws-actions/amazon-ecr-login@v2.1.7
       - name: Build and push
         env:
           REGISTRY: 609394381484.dkr.ecr.us-east-1.amazonaws.com
