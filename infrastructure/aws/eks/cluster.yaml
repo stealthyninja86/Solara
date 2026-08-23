@@ -10,7 +10,7 @@ metadata:
     cost-center: interview
 managedNodeGroups:
   - name: solara-ng
-    instanceType: t4g.small
+    instanceType: c7i-flex.large
     desiredCapacity: 1
     minSize: 1
     maxSize: 1
