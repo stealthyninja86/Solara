@@ -51,7 +51,7 @@ Add transactions manually or bulk-import your bank's CSV. Solara auto-detects th
 
 ### Categorize with AI
 
-Every transaction is automatically categorized using a local LLM running on Ollama. Solara uses RAG (Retrieval-Augmented Generation) — it looks up similar past transactions via pgvector embeddings, gives the LLM that context, and validates the result confidence. If the AI isn't sure, it flags the transaction for your review. 19 categories out of the box: Food & Dining, Transport, Fuel, Shopping, Clothing, Electronics, Entertainment, Bills & Utilities, Healthcare, Groceries, Pets, Rent, Loan EMI, Salary, Investment, Education, Travel, Other, Uncategorized.
+Every transaction is automatically categorized using a local LLM running on Ollama. Solara uses RAG (Retrieval-Augmented Generation) — it looks up similar past transactions via pgvector embeddings, gives the LLM that context, and validates the result confidence. If the AI isn't sure, it flags the transaction for your review. 19+ categories out of the box: Food & Dining, Transport, Fuel, Shopping, Clothing, Electronics, Entertainment, Bills & Utilities, Healthcare, Groceries, Pets, Rent, Loan EMI, Salary, Investment, Education, Travel, Budget, Other, Uncategorized.
 
 ### Know What's Left
 
@@ -110,7 +110,7 @@ Run it on your laptop, a Raspberry Pi, or a full AWS account. The data model, th
 - **Cache stampede protection** — Redis TTLs use ±20% jitter to prevent synchronized expiry thundering on the database.
 - **Virtual threads** — LLM calls block for 10–30 seconds. Virtual threads prevent platform thread saturation.
 - **Flyway migrations** — schema versioned and reproducible across every service.
-- **Full observability** — OpenTelemetry traces, Prometheus metrics, Grafana dashboards, Loki logs. Optional stack via Docker Compose profile.
+- **Full observability** — OpenTelemetry traces, Prometheus metrics, Grafana dashboards, Loki logs. Included via docker compose.
 
 
 ---
@@ -118,21 +118,21 @@ Run it on your laptop, a Raspberry Pi, or a full AWS account. The data model, th
 ## Quick Start
 
 ```bash
-# Prerequisites: Docker Compose, Node.js 20+
+# Prerequisites: Docker Compose, Node.js 22+
 
 git clone https://github.com/stealthyninja86/Solara.git
 cd Solara
 
-# Start all backend services
+# Start all services (backend + frontend)
 docker compose up -d
 
-# In a new terminal — start the frontend
+# For development with hot reload (optional — separate terminal)
 cd frontend
 npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173), register an account, and you're up.
+Open [http://localhost:80](http://localhost:80) (Docker) or [http://localhost:5173](http://localhost:5173) (dev server), register an account, and you're up.
 
 ---
 

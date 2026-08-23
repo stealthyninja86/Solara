@@ -269,11 +269,10 @@ export function LandingPage() {
                 <span className="text-4xl">{"\u2600\uFE0F"}</span>
               </div>
               <h2 className="landing-section-title" style={{ textAlign: "center" }}>
-                Your data never leaves your machine.
+                Your data, your choice.
               </h2>
               <p className="landing-section-sub" style={{ textAlign: "center" }}>
-                No cloud. No subscriptions. No third-party access to your financial data.
-                Everything runs locally on your machine.
+                Run locally on your machine for full privacy, or deploy to the cloud — your data stays yours either way.
               </p>
             </div>
           </Reveal>
@@ -337,14 +336,6 @@ export function LandingPage() {
                 className="landing-footer-link"
               >
                 GitHub
-              </a>
-              <a
-                href="https://github.com/stealthyninja86/Solara/blob/main/LICENSE"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="landing-footer-link"
-              >
-                MIT License
               </a>
             </div>
           </div>
