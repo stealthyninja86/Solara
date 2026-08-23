@@ -31,11 +31,11 @@ spec:
             - name: KAFKA_PROCESS_ROLES
               value: broker,controller
             - name: KAFKA_CONTROLLER_QUORUM_VOTERS
-              value: "1@kafka:9093"
+              value: "1@localhost:9093"
             - name: KAFKA_LISTENERS
               value: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9094"
             - name: KAFKA_ADVERTISED_LISTENERS
-              value: "PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094"
+              value: "PLAINTEXT://kafka-0.kafka:9092,EXTERNAL://localhost:9094"
             - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
               value: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT"
             - name: KAFKA_INTER_BROKER_LISTENER_NAME
@@ -50,6 +50,14 @@ spec:
               value: "1"
             - name: CLUSTER_ID
               value: "solara-cluster"
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xmx384m -Xms384m"
+          startupProbe:
+            tcpSocket:
+              port: 9092
+            failureThreshold: 60
+            periodSeconds: 5
+            timeoutSeconds: 5
           volumeMounts:
             - name: kafka-data
               mountPath: /var/lib/kafka/data
@@ -68,7 +76,7 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 384Mi
+              memory: 512Mi
             limits:
               cpu: 500m
               memory: 768Mi
@@ -83,6 +91,7 @@ metadata:
   labels:
     app: kafka
 spec:
+  clusterIP: None
   selector:
     app: kafka
   ports:
