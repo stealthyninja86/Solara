@@ -30,7 +30,7 @@ public class User {
     private String iconMode = "icons";
 
     @Column(nullable = false)
-    private Boolean llmEnabled = true;
+    private Boolean llmEnabled = false;
 
     public UUID getId() {
         return id;

@@ -10,6 +10,7 @@ interface Props {
 
 export function ImportTipsModal({ visible, onClose, onChooseFile }: Props) {
   const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   function handleChooseFile() {
     onClose();
@@ -66,6 +67,51 @@ export function ImportTipsModal({ visible, onClose, onChooseFile }: Props) {
             <span>After you upload, it takes a moment to process. You can keep using the app — we will show you when it is done.</span>
           </li>
         </ul>
+
+        <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-hover)]/50 px-3 py-2.5">
+          <button
+            type="button"
+            onClick={() => setExportOpen((value) => !value)}
+            className="flex w-full items-center justify-between text-left text-[0.8rem] font-medium text-[var(--color-text)]"
+            aria-expanded={exportOpen}
+          >
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden>{exportOpen ? "▴" : "▾"}</span> How to export from your bank
+            </span>
+          </button>
+          {exportOpen && (
+            <div className="mt-2 text-[0.8rem] leading-relaxed text-[var(--color-text-muted)]">
+              <p className="mb-2 font-medium text-[var(--color-text)]">From your bank&apos;s website:</p>
+              <ol className="mb-3 list-decimal pl-5">
+                <li>Log in to your bank&apos;s website</li>
+                <li>Go to <strong>Accounts → Statement</strong> or <strong>Transaction History</strong></li>
+                <li>Select the date range you want</li>
+                <li>Look for <strong>Download</strong> or <strong>Export</strong> button</li>
+                <li>Choose <strong>CSV</strong> or <strong>Excel</strong> format</li>
+                <li>Click Download</li>
+              </ol>
+              <p className="mb-2 font-medium text-[var(--color-text)]">From your bank&apos;s mobile app:</p>
+              <ol className="mb-3 list-decimal pl-5">
+                <li>Open your bank app</li>
+                <li>Tap on the account</li>
+                <li>Go to <strong>Transactions</strong> or <strong>Statement</strong></li>
+                <li>Look for <strong>Download</strong> or <strong>Export</strong> icon (usually ⬇ or 📤)</li>
+                <li>Select <strong>CSV</strong> or <strong>Excel</strong> format</li>
+              </ol>
+              <p className="mb-2 font-medium text-[var(--color-text)]">If you downloaded an Excel file (.xlsx):</p>
+              <ol className="mb-2 list-decimal pl-5">
+                <li>Open the file in Excel or Google Sheets</li>
+                <li>Go to <strong>File → Save As</strong> (or <strong>Download → CSV</strong>)</li>
+                <li>Choose <strong>CSV</strong> as the format</li>
+                <li>Save the file</li>
+              </ol>
+              <p className="mt-2 text-[0.75rem] italic">
+                Tip: Most banks support CSV export. If your bank only offers PDF, check their website — PDF
+                downloads are usually available there.
+              </p>
+            </div>
+          )}
+        </div>
 
         <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-hover)]/50 px-3 py-2.5">
           <button

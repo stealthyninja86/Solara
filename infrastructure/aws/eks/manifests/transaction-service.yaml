@@ -6,6 +6,11 @@ metadata:
     app: transaction-service
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: transaction-service
@@ -54,11 +59,11 @@ spec:
             periodSeconds: 10
           resources:
             requests:
-              cpu: 250m
+              cpu: 100m
               memory: 384Mi
             limits:
-              cpu: 500m
-              memory: 768Mi
+              cpu: 250m
+              memory: 512Mi
 ---
 apiVersion: v1
 kind: Service

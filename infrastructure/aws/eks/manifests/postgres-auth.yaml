@@ -52,7 +52,7 @@ spec:
               memory: 192Mi
             limits:
               cpu: 250m
-              memory: 384Mi
+              memory: 256Mi
       volumes:
         - name: auth-db-data
           emptyDir: {}

@@ -9,7 +9,7 @@ export function DashboardSettings() {
   const aiStatus = useAiStatus();
   const isEmoji = mode === "emoji";
 
-  const llmOn = llmEnabled ?? true;
+  const llmOn = llmEnabled ?? false;
   const [llmSaving, setLlmSaving] = useState(false);
   const [llmSuccess, setLlmSuccess] = useState(false);
   const [llmError, setLlmError] = useState<string | null>(null);
