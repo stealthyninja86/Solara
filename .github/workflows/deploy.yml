@@ -65,8 +65,8 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     concurrency:
-      group: deploy-${{ github.ref }}
-      cancel-in-progress: false         # queue deploy instead of cancel
+      group: build-${{ github.run_id }}
+      cancel-in-progress: false         # all matrix jobs must complete
     permissions:
       id-token: write                   # OIDC — lets GitHub assume the IAM role without a password
       contents: read
