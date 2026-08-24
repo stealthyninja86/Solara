@@ -676,6 +676,7 @@ export function DashboardOverview() {
           transactionSubmit.setShowQuickReviewModal();
         }}
         detailSaveLoading={transactionSubmit.detailLoading}
+        error={transactionSubmit.error}
         onClose={() => transactionSubmit.setShowQuickReviewModal()}
       />
 

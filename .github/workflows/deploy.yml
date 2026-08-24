@@ -1,8 +1,9 @@
 # .github/workflows/deploy.yml
-# Solara CI/CD — Phase 1 (build-test) + Phase 2 (build-and-push to ECR).
+# Solara CI/CD — Phase 1 (build-test) + Phase 2 (build-and-push) + Phase 3 (deploy).
 #
 # Phase 1: build+test on every PR and push to main/production.
 # Phase 2: build Docker images and push to ECR (main only, after build-test passes).
+# Phase 3: deploy to EKS via kubectl (main only, after push succeeds).
 #          Needs IAM role `github-solara-ecr` (OIDC, one-time root console setup — §6.3).
 #
 # This workflow lives on main and production; GitHub runs it only for branches it is pushed to.
@@ -14,10 +15,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-concurrency:
-  group: ${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
 
@@ -25,6 +22,9 @@ jobs:
   build-test:
     name: build-test (${{ matrix.service }})
     runs-on: ubuntu-latest
+    concurrency:
+      group: test-${{ github.ref }}-${{ matrix.service }}
+      cancel-in-progress: true          # cancel stale PR builds, never cancel main
     strategy:
       fail-fast: false                   # one red service must not cancel the other three
       matrix:
@@ -33,24 +33,40 @@ jobs:
           - auth-service
           - transaction-service
           - insight-service
+          - frontend
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
+        if: matrix.service != 'frontend'
         with:
           distribution: temurin
           java-version: "21"
           cache: maven                 # ~/.m2 cache across runs — the #1 pipeline speedup
-      - name: Compile + package
+      - name: Compile + package (Java)
+        if: matrix.service != 'frontend'
         working-directory: ${{ matrix.service }}
         # Tests are deferred (JUnit/Mockito/Testcontainers land later). The moment the test
         # suites land, flip to `./mvnw verify` and delete the skip flag.
         run: ./mvnw package -Dmaven.test.skip=true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: matrix.service == 'frontend'
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build (frontend)
+        if: matrix.service == 'frontend'
+        working-directory: frontend
+        run: npm ci && npm run build
 
   build-and-push:
     name: build-and-push (${{ matrix.service }})
     needs: build-test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-${{ github.ref }}
+      cancel-in-progress: false         # queue deploy instead of cancel
     permissions:
       id-token: write                   # OIDC — lets GitHub assume the IAM role without a password
       contents: read
@@ -70,11 +86,56 @@ jobs:
           role-to-assume: arn:aws:iam::609394381484:role/github-solara-ecr
           aws-region: us-east-1
       - uses: aws-actions/amazon-ecr-login@v2.1.7
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Build and push
-        env:
-          REGISTRY: 609394381484.dkr.ecr.us-east-1.amazonaws.com
-          TAG: ${{ github.sha }}
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./${{ matrix.service }}
+          push: true
+          tags: |
+            609394381484.dkr.ecr.us-east-1.amazonaws.com/solara/${{ matrix.service }}:${{ github.sha }}
+            609394381484.dkr.ecr.us-east-1.amazonaws.com/solara/${{ matrix.service }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: deploy-to-eks
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      ECR_REGISTRY: 609394381484.dkr.ecr.us-east-1.amazonaws.com
+      IMAGE_TAG: ${{ github.sha }}
+      EKS_CLUSTER: solara-demo
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::609394381484:role/github-solara-ecr
+          aws-region: us-east-1
+      - name: Install kubectl
+        uses: azure/setup-kubectl@c0c8b32d33a5244f1e5947304550403b63930415 # v4
+        with:
+          version: "v1.33.4"
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name $EKS_CLUSTER --region us-east-1
+      - name: Deploy to EKS
         run: |
-          docker build -t $REGISTRY/solara/${{ matrix.service }}:$TAG -t $REGISTRY/solara/${{ matrix.service }}:latest ./${{ matrix.service }}
-          docker push $REGISTRY/solara/${{ matrix.service }}:$TAG
-          docker push $REGISTRY/solara/${{ matrix.service }}:latest
+          for service in api-gateway auth-service transaction-service insight-service frontend; do
+            sed -i.bak "s|609394381484.dkr.ecr.us-east-1.amazonaws.com/solara/${service}:[^ ]*|${ECR_REGISTRY}/solara/${service}:${IMAGE_TAG}|g" \
+              infrastructure/aws/eks/manifests/${service}.yaml
+            kubectl apply -f infrastructure/aws/eks/manifests/${service}.yaml
+          done
+      - name: Wait for rollouts
+        run: |
+          kubectl rollout status deployment/api-gateway -n default --timeout=300s
+          kubectl rollout status deployment/auth-service -n default --timeout=300s
+          kubectl rollout status deployment/transaction-service -n default --timeout=300s
+          kubectl rollout status deployment/insight-service -n default --timeout=300s
+          kubectl rollout status deployment/frontend -n default --timeout=300s

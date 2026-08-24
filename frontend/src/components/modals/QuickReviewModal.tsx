@@ -25,6 +25,7 @@ interface Props {
   onReview: () => void;
   onDetailSave?: () => void;
   detailSaveLoading?: boolean;
+  error?: string | null;
   onClose: () => void;
 }
 
@@ -35,7 +36,7 @@ export function QuickReviewModal({
   editMerchant, onMerchantChange,
   editAmount, onAmountChange,
   editPaymentMode, onPaymentModeChange,
-  onLooksGood, onReview, onDetailSave, detailSaveLoading,
+  onLooksGood, onReview, onDetailSave, detailSaveLoading, error,
   onClose,
 }: Props) {
   const data = reviewData;
@@ -223,6 +224,12 @@ export function QuickReviewModal({
               Updated: {new Date(data.updatedAt).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
             </span>
           )}
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-2 rounded border border-[var(--color-bad)]/30 bg-[var(--color-bad)]/10 px-3 py-2 text-[0.75rem] text-[var(--color-bad)]">
+          {error}
         </div>
       )}
 

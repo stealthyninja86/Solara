@@ -35,36 +35,21 @@ export function ImportTipsModal({ visible, onClose, onChooseFile }: Props) {
 
       <div className="modal-body flex flex-col gap-4">
         <p className="text-[0.85rem] leading-relaxed text-[var(--color-text-muted)]">
-          A few quick tips before you upload — they help us read your file correctly and keep your data safe.
+          Upload a CSV file from your bank and we will categorize your transactions automatically.
         </p>
 
-        <ul className="flex flex-col gap-3 text-[0.85rem] leading-relaxed text-[var(--color-text)]">
+        <ul className="flex flex-col gap-2 text-[0.85rem] leading-relaxed text-[var(--color-text)]">
           <li className="flex gap-2">
             <span className="shrink-0 text-[var(--color-ok)]">•</span>
             <span>
-              Upload your bank CSV file. Maximum size is <strong>2 MB</strong> — that is about 10 to 15 years of
-              statements, so most files fit easily.
+              CSV files only — max <strong>2 MB</strong>. If your file is larger, split it and keep the header row in each part.
             </span>
           </li>
           <li className="flex gap-2">
             <span className="shrink-0 text-[var(--color-ok)]">•</span>
             <span>
-              If your file is larger than 2 MB, split it into smaller files.{" "}
-              <strong>Keep the first row with headings like Date, Description, Amount in each file</strong> — we need
-              that row to understand your data. Upload the files one at a time.
+              Columns like <strong>Date, Description, Amount</strong> are needed. You can remove account number, address, or other private columns before uploading.
             </span>
-          </li>
-          <li className="flex gap-2">
-            <span className="shrink-0 text-[var(--color-ok)]">•</span>
-            <span>
-              You can remove private details before uploading — like account number, address, or name. We mainly need
-              columns like <strong>Date, Description, Amount etc.</strong> — keep those so we can read your file
-              correctly.
-            </span>
-          </li>
-          <li className="flex gap-2">
-            <span className="shrink-0 text-[var(--color-ok)]">•</span>
-            <span>After you upload, it takes a moment to process. You can keep using the app — we will show you when it is done.</span>
           </li>
         </ul>
 
