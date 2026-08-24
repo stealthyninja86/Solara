@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   CategorizedTransactionResponse,
   CreateTransactionRequest,
@@ -58,6 +58,12 @@ export function useTransactionSubmit() {
   const [createdTransaction, setCreatedTransaction] = useState<TransactionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingTransactionId, setPendingTransactionId] = useState<string | null>(null);
+  const pendingTransactionIdRef = useRef<string | null>(null);
+
+  function setPending(id: string | null) {
+    setPendingTransactionId(id);
+    pendingTransactionIdRef.current = id;
+  }
   const [reviewData, setReviewData] = useState<CategorizedTransactionResponse | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<TransactionCategory | "">("");
   const [reviewDescription, setReviewDescription] = useState("");
@@ -97,7 +103,7 @@ export function useTransactionSubmit() {
   }
 
   function retryPollTransaction() {
-    const txId = pendingTransactionId;
+    const txId = pendingTransactionIdRef.current;
     if (txId) {
       setReviewData(null);
       setPollFailed(false);
@@ -110,7 +116,7 @@ export function useTransactionSubmit() {
       setCreatedTransaction(transaction);
       initEditableFields(transaction);
     }
-    setPendingTransactionId(transactionId);
+    setPending(transactionId);
     setSelectedCategory("");
     setReviewDescription("");
     setReviewData(null);
@@ -123,7 +129,7 @@ export function useTransactionSubmit() {
     event.preventDefault();
     setError(null);
     setCreatedTransaction(null);
-    setPendingTransactionId(null);
+    setPending(null);
     setReviewData(null);
 
     const parsedAmount = parseFloat(amount);
@@ -166,7 +172,11 @@ export function useTransactionSubmit() {
   }
 
   async function handleLooksGood(refresh: (page: number) => Promise<void>) {
-    if (!pendingTransactionId) return;
+    const txId = pendingTransactionIdRef.current;
+    if (!txId) {
+      setError("No pending transaction to save.");
+      return;
+    }
     setModalLoading(true);
     try {
       const promises: Promise<Response>[] = [];
@@ -176,7 +186,7 @@ export function useTransactionSubmit() {
       if (!isNaN(parsedAmount) && parsedAmount > 0) txBody.amount = parsedAmount;
       if (editPaymentMode) txBody.paymentMode = editPaymentMode;
       if (Object.keys(txBody).length > 0) {
-        promises.push(api(`/api/v1/transactions/${pendingTransactionId}?userId=${getUserId() ?? DEFAULT_USER_ID}`, {
+        promises.push(api(`/api/v1/transactions/${txId}?userId=${getUserId() ?? DEFAULT_USER_ID}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(txBody),
@@ -188,7 +198,7 @@ export function useTransactionSubmit() {
         if (categoryToSave) catBody.category = categoryToSave;
         if (reviewDescription.trim()) catBody.description = reviewDescription.trim();
         catBody.needsReview = false;
-        promises.push(api(`/api/v1/category/transaction/${pendingTransactionId}`, {
+        promises.push(api(`/api/v1/category/transaction/${txId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(catBody),
@@ -204,14 +214,14 @@ export function useTransactionSubmit() {
       }
       clearPendingReview();
       setShowQuickReviewModal(false);
-      setPendingTransactionId(null);
+      setPending(null);
       const createdAt = reviewData?.createdAt ?? new Date().toISOString();
       const txDate = new Date(createdAt);
       localStorage.setItem("solara.overview.banner", JSON.stringify({
         type: "single-tx",
         month: txDate.getMonth() + 1,
         year: txDate.getFullYear(),
-        transactionId: pendingTransactionId,
+        transactionId: txId,
         merchant: editMerchant.trim(),
         amount: parseFloat(editAmount) || 0,
         createdAt,
@@ -226,7 +236,11 @@ export function useTransactionSubmit() {
   }
 
   async function handleReview(refresh: (page: number) => Promise<void>) {
-    if (!pendingTransactionId) return;
+    const txId = pendingTransactionIdRef.current;
+    if (!txId) {
+      setError("No pending transaction to save.");
+      return;
+    }
     setModalLoading(true);
     try {
       const promises: Promise<Response>[] = [];
@@ -236,7 +250,7 @@ export function useTransactionSubmit() {
       if (!isNaN(parsedAmount) && parsedAmount > 0) txBody.amount = parsedAmount;
       if (editPaymentMode) txBody.paymentMode = editPaymentMode;
       if (Object.keys(txBody).length > 0) {
-        promises.push(api(`/api/v1/transactions/${pendingTransactionId}?userId=${getUserId() ?? DEFAULT_USER_ID}`, {
+        promises.push(api(`/api/v1/transactions/${txId}?userId=${getUserId() ?? DEFAULT_USER_ID}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(txBody),
@@ -245,7 +259,7 @@ export function useTransactionSubmit() {
       const catBody: Record<string, unknown> = { needsReview: true };
       if (selectedCategory) catBody.category = selectedCategory.trim();
       if (reviewDescription.trim()) catBody.description = reviewDescription.trim();
-      promises.push(api(`/api/v1/category/transaction/${pendingTransactionId}`, {
+      promises.push(api(`/api/v1/category/transaction/${txId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(catBody),
@@ -258,14 +272,14 @@ export function useTransactionSubmit() {
       }
       clearPendingReview();
       setShowQuickReviewModal(false);
-      setPendingTransactionId(null);
+      setPending(null);
       const createdAt = reviewData?.createdAt ?? new Date().toISOString();
       const txDate = new Date(createdAt);
       localStorage.setItem("solara.overview.banner", JSON.stringify({
         type: "single-tx",
         month: txDate.getMonth() + 1,
         year: txDate.getFullYear(),
-        transactionId: pendingTransactionId,
+        transactionId: txId,
         merchant: editMerchant.trim(),
         amount: parseFloat(editAmount) || 0,
         createdAt,
@@ -296,7 +310,7 @@ export function useTransactionSubmit() {
   function openDetailModal(transaction: CategorizedTransactionResponse) {
     setDetailMode("detail");
     setReviewData(transaction);
-    setPendingTransactionId(transaction.transactionId);
+    setPending(transaction.transactionId);
     setSelectedCategory(transaction.category ?? "");
     setReviewDescription(transaction.description ?? "");
     setEditMerchant(transaction.merchant ?? "");
@@ -306,11 +320,12 @@ export function useTransactionSubmit() {
   }
 
   async function handleDetailSave() {
-    if (!pendingTransactionId) return;
+    const txId = pendingTransactionIdRef.current;
+    if (!txId) return;
     setDetailLoading(true);
     try {
       const response = await api(
-        `/api/v1/category/transaction/${pendingTransactionId}`,
+        `/api/v1/category/transaction/${txId}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -337,7 +352,7 @@ export function useTransactionSubmit() {
   useEffect(() => {
     const pending = loadPendingReview();
     if (pending) {
-      setPendingTransactionId(pending.transactionId);
+      setPending(pending.transactionId);
       setSelectedCategory("");
       setReviewData(null);
       setShowQuickReviewModal(true);
