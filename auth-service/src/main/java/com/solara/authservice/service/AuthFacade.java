@@ -21,10 +21,12 @@ public class AuthFacade {
     Logger logger = LoggerFactory.getLogger(AuthFacade.class);
 
     private final AuthService authService;
+    private final UserService userService;
     private final JwtService jwtService;
 
-    public AuthFacade(AuthService authService, JwtService jwtService) {
+    public AuthFacade(AuthService authService, UserService userService, JwtService jwtService) {
         this.authService = authService;
+        this.userService = userService;
         this.jwtService = jwtService;
     }
 
@@ -50,6 +52,9 @@ public class AuthFacade {
         }
         var userId = jwtService.extractUserId(token);
         var email = jwtService.extractEmail(token);
+        if (userService.findById(userId).isEmpty()) {
+            throw new InvalidCredentialsException("User no longer exists");
+        }
         String newAccessToken = jwtService.generateAccessToken(userId, email);
         String newRefreshToken = jwtService.generateRefreshToken(userId, email);
         logger.info("Token refreshed: {}", email);
@@ -62,6 +67,9 @@ public class AuthFacade {
         }
         var userId = jwtService.extractUserId(refreshTokenCookie);
         var email = jwtService.extractEmail(refreshTokenCookie);
+        if (userService.findById(userId).isEmpty()) {
+            return Optional.empty();
+        }
         String accessToken = jwtService.generateAccessToken(userId, email);
         String newRefreshToken = jwtService.generateRefreshToken(userId, email);
         return Optional.of(new LoginResponse(accessToken, newRefreshToken, email));
@@ -79,8 +87,9 @@ public class AuthFacade {
         return authService.updateProfile(id, firstName, lastName);
     }
 
-    public UserProfileResponse updateSettings(UUID id, String iconMode, Boolean llmEnabled) {
-        return authService.updateSettings(id, iconMode, llmEnabled);
+    public UserProfileResponse updateSettings(UUID id, String iconMode, Boolean aiSettings,
+                                              String llmProvider, String llmApiKey, String llmChatModel) {
+        return authService.updateSettings(id, iconMode, aiSettings, llmProvider, llmApiKey, llmChatModel);
     }
 
     public UserSettingsResponse getUserSettings(UUID id) {

@@ -2,6 +2,7 @@ package com.solara.insightservice.service.insight;
 
 import com.solara.insightservice.dto.response.InsightCardResponse;
 import com.solara.insightservice.dto.response.RecommendationResponse;
+import com.solara.insightservice.dto.response.UserSettingsResponse;
 import com.solara.insightservice.exception.AiInsightsDisabledException;
 import com.solara.insightservice.metrics.InsightPipeMetrics;
 import com.solara.insightservice.model.InsightType;
@@ -65,13 +66,14 @@ public class InsightFacade {
 
     private List<InsightCardResponse> fetchCards(UUID userId, ReportPeriod period, LocalDate at,
                                                  Set<InsightType> types, boolean force) {
+        UserSettingsResponse settings = userSettingsService.fetchSettings(userId);
         if (!userSettingsService.isLlmEnabled(userId)) {
-            log.info("Insight surface suppressed: userId={}, types={}, llmEnabled=false",
+            log.info("Insight surface suppressed: userId={}, types={}, aiSettings=false",
                     userId, InsightType.cacheSuffix(types));
             throw new AiInsightsDisabledException();
         }
         LocalDate anchor = at != null ? at : LocalDate.now();
-        return insightGenerator.feed(userId, period, anchor, true, types, force);
+        return insightGenerator.feed(userId, period, anchor, true, types, force, settings);
     }
 
     private String actionFor(InsightCardResponse card, boolean hasBudget) {

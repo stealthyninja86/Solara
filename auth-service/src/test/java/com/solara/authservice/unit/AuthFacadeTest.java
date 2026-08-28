@@ -46,7 +46,7 @@ class AuthFacadeTest {
     @Test
     void registerUser_createsUserAndGeneratesTokens() {
         var request = new RegisterRequest(email, "pass123", "Alice", "Smith");
-        var userProfile = new UserProfileResponse(userId, email, "Alice", "Smith", "icons", true);
+        var userProfile = new UserProfileResponse(userId, email, "Alice", "Smith", "icons", true, null, null, null);
         when(authService.registerUser(request)).thenReturn(userProfile);
         when(jwtService.generateAccessToken(userId, email)).thenReturn("eyJ.access.token");
         when(jwtService.generateRefreshToken(userId, email)).thenReturn("eyJ.refresh.token");
@@ -62,7 +62,7 @@ class AuthFacadeTest {
     @Test
     void loginUser_validCredentials_generatesTokens() {
         var request = new LoginRequest(email, "pass123");
-        var userProfile = new UserProfileResponse(userId, email, "Alice", "Smith", "icons", true);
+        var userProfile = new UserProfileResponse(userId, email, "Alice", "Smith", "icons", true, null, null, null);
         when(authService.loginUser(request)).thenReturn(userProfile);
         when(jwtService.generateAccessToken(userId, email)).thenReturn("eyJ.access.token");
         when(jwtService.generateRefreshToken(userId, email)).thenReturn("eyJ.refresh.token");

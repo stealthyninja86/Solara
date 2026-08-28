@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../utils/api";
+import type { LlmProvider } from "../types";
 
 export type IconMode = "emoji" | "icons";
 
@@ -7,13 +8,16 @@ type Profile = {
   firstName: string | null;
   lastName: string | null;
   iconMode: string | null;
-  llmEnabled: boolean | null;
+  aiSettings: boolean | null;
+  llmProvider: LlmProvider | null;
+  llmApiKey: string | null;
+  llmChatModel: string | null;
 };
 
 let _token: string | null = null;
 let _email: string | null = null;
 let _userId: string | null = null;
-let _profile: Profile = { firstName: null, lastName: null, iconMode: null, llmEnabled: null };
+let _profile: Profile = { firstName: null, lastName: null, iconMode: null, aiSettings: null, llmProvider: null, llmApiKey: null, llmChatModel: null };
 
 export function getToken() { return _token; }
 export function getEmail() { return _email; }
@@ -46,7 +50,7 @@ function clearAuth() {
   _token = null;
   _email = null;
   _userId = null;
-  _profile = { firstName: null, lastName: null, iconMode: null, llmEnabled: null };
+  _profile = { firstName: null, lastName: null, iconMode: null, aiSettings: null, llmProvider: null, llmApiKey: null, llmChatModel: null };
 }
 
 export function useAuth() {
@@ -56,7 +60,10 @@ export function useAuth() {
   const [firstName, setFirstName] = useState<string | null>(_profile.firstName);
   const [lastName, setLastName] = useState<string | null>(_profile.lastName);
   const [iconMode, setIconModeState] = useState<IconMode | null>(getIconMode());
-  const [llmEnabled, setLlmEnabled] = useState<boolean | null>(_profile.llmEnabled);
+  const [aiSettings, setLlmEnabled] = useState<boolean | null>(_profile.aiSettings);
+  const [llmProvider, setLlmProvider] = useState<LlmProvider | null>(_profile.llmProvider);
+  const [llmApiKey, setLlmApiKey] = useState<string | null>(_profile.llmApiKey);
+  const [llmChatModel, setLlmChatModel] = useState<string | null>(_profile.llmChatModel);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -65,14 +72,32 @@ export function useAuth() {
       return;
     }
     fetch("/api/v1/auth/token", { method: "POST", credentials: "include" })
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => {
+        if (!r.ok) {
+          clearAuth();
+          if (window.location.pathname !== "/login") {
+            window.location.assign("/login");
+          }
+          return null;
+        }
+        return r.json();
+      })
       .then((data) => {
         if (data?.accessToken) {
           setAuth(data.accessToken, data.email);
           setToken(_token);
           setEmail(_email);
           setUserId(_userId);
-          return api("/api/v1/auth/profile").then((r) => (r.ok ? r.json() : null));
+          return api("/api/v1/auth/profile").then((r) => {
+            if (!r.ok) {
+              clearAuth();
+              if (window.location.pathname !== "/login") {
+                window.location.assign("/login");
+              }
+              return null;
+            }
+            return r.json();
+          });
         }
         return null;
       })
@@ -82,7 +107,10 @@ export function useAuth() {
           setFirstName(_profile.firstName);
           setLastName(_profile.lastName);
           setIconModeState(getIconMode());
-          setLlmEnabled(_profile.llmEnabled);
+          setLlmEnabled(_profile.aiSettings);
+          setLlmProvider(_profile.llmProvider);
+          setLlmApiKey(_profile.llmApiKey);
+          setLlmChatModel(_profile.llmChatModel);
         }
       })
       .catch(() => {})
@@ -109,7 +137,10 @@ export function useAuth() {
       setFirstName(_profile.firstName);
       setLastName(_profile.lastName);
       setIconModeState(getIconMode());
-      setLlmEnabled(_profile.llmEnabled);
+      setLlmEnabled(_profile.aiSettings);
+      setLlmProvider(_profile.llmProvider);
+      setLlmApiKey(_profile.llmApiKey);
+      setLlmChatModel(_profile.llmChatModel);
     }
   }, []);
 
@@ -127,11 +158,14 @@ export function useAuth() {
       setToken(_token);
       setEmail(_email);
       setUserId(_userId);
-      applyProfile({ firstName: firstNameVal, lastName: lastNameVal, iconMode: null, llmEnabled: null });
+      applyProfile({ firstName: firstNameVal, lastName: lastNameVal, iconMode: null, aiSettings: null, llmProvider: null, llmApiKey: null, llmChatModel: null });
       setFirstName(_profile.firstName);
       setLastName(_profile.lastName);
       setIconModeState(getIconMode());
-      setLlmEnabled(_profile.llmEnabled);
+      setLlmEnabled(_profile.aiSettings);
+      setLlmProvider(_profile.llmProvider);
+      setLlmApiKey(_profile.llmApiKey);
+      setLlmChatModel(_profile.llmChatModel);
     },
     []
   );
@@ -150,6 +184,9 @@ export function useAuth() {
     setLastName(null);
     setIconModeState(null);
     setLlmEnabled(null);
+    setLlmProvider(null);
+    setLlmApiKey(null);
+    setLlmChatModel(null);
   }, []);
 
   const updateProfile = useCallback(async (firstNameVal: string | null, lastNameVal: string | null) => {
@@ -173,11 +210,14 @@ export function useAuth() {
     setFirstName(_profile.firstName);
     setLastName(_profile.lastName);
     setIconModeState(getIconMode());
-    setLlmEnabled(_profile.llmEnabled);
+    setLlmEnabled(_profile.aiSettings);
+    setLlmProvider(_profile.llmProvider);
+    setLlmApiKey(_profile.llmApiKey);
+    setLlmChatModel(_profile.llmChatModel);
     return profile;
   }, []);
 
-  const updateSettings = useCallback(async (next: { iconMode?: IconMode; llmEnabled?: boolean }) => {
+  const updateSettings = useCallback(async (next: { iconMode?: IconMode; aiSettings?: boolean; llmProvider?: LlmProvider; llmApiKey?: string | null; llmChatModel?: string | null }) => {
     const res = await api("/api/v1/auth/profile/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -196,7 +236,10 @@ export function useAuth() {
     const profile = await res.json();
     applyProfile(profile);
     setIconModeState(getIconMode());
-    setLlmEnabled(_profile.llmEnabled);
+    setLlmEnabled(_profile.aiSettings);
+    setLlmProvider(_profile.llmProvider);
+    setLlmApiKey(_profile.llmApiKey);
+    setLlmChatModel(_profile.llmChatModel);
     return profile;
   }, []);
 
@@ -225,7 +268,10 @@ export function useAuth() {
     firstName,
     lastName,
     iconMode,
-    llmEnabled,
+    aiSettings,
+    llmProvider,
+    llmApiKey,
+    llmChatModel,
     isAuthenticated: !!token,
     isLoading,
     login,

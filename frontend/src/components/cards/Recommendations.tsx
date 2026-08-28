@@ -45,12 +45,12 @@ const MONTH_NAMES = [
 
 export function Recommendations({ month, year, refreshKey = 0, hasEnoughData = true }: Props) {
   const navigate = useNavigate();
-  const { llmEnabled } = useAuth();
+  const { aiSettings } = useAuth();
   const { remaining, limit, refresh: refreshRegenerationStatus } = useRegenerationStatus();
   const [period, setPeriod] = useState<TimePeriod>("monthly");
-  const { recommendations, loading, error, regenerating, regenerate } = useRecommendations(month, year, period, refreshKey, llmEnabled === true);
+  const { recommendations, loading, error, regenerating, regenerate } = useRecommendations(month, year, period, refreshKey, aiSettings === true);
 
-  if (llmEnabled === false) return null;
+  if (!aiSettings) return null;
 
   const now = new Date();
   const isCurrentMonth = month === now.getMonth() && year === now.getFullYear();

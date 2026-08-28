@@ -30,24 +30,20 @@ public class UserSettingsService {
     }
 
     public boolean isLlmEnabled(UUID userId) {
-        return fetchLlmEnabled(userId);
+        UserSettingsResponse settings = fetchSettings(userId);
+        return settings != null && Boolean.TRUE.equals(settings.aiSettings());
     }
 
-    private boolean fetchLlmEnabled(UUID userId) {
+    public UserSettingsResponse fetchSettings(UUID userId) {
         try {
-            UserSettingsResponse settings = restClient.get()
+            return restClient.get()
                     .uri("/auth/users/{userId}/settings", userId)
                     .header("X-Service-Api-Key", apiKey)
                     .retrieve()
                     .body(UserSettingsResponse.class);
-            if (settings != null && Boolean.FALSE.equals(settings.llmEnabled())) {
-                return false;
-            }
-            return true;
         } catch (Exception e) {
-            log.warn("Failed to fetch settings for user {} (defaulting llmEnabled=true): {}",
-                    userId, e.getMessage());
-            return true;
+            log.warn("Failed to fetch settings for user {}: {}", userId, e.getMessage());
+            return null;
         }
     }
 }

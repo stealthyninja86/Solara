@@ -3,7 +3,11 @@ package com.solara.authservice.entity;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 @Entity
@@ -30,7 +34,17 @@ public class User {
     private String iconMode = "icons";
 
     @Column(nullable = false)
-    private Boolean llmEnabled = false;
+    private Boolean aiSettings = false;
+
+    @Column(length = 20)
+    private String llmProvider;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    private Map<String, String> llmApiKeys = new HashMap<>();
+
+    @Column(length = 100)
+    private String llmChatModel;
 
     public UUID getId() {
         return id;
@@ -80,11 +94,35 @@ public class User {
         this.iconMode = iconMode;
     }
 
-    public Boolean getLlmEnabled() {
-        return llmEnabled;
+    public Boolean getAiSettings() {
+        return aiSettings;
     }
 
-    public void setLlmEnabled(Boolean llmEnabled) {
-        this.llmEnabled = llmEnabled;
+    public void setAiSettings(Boolean aiSettings) {
+        this.aiSettings = aiSettings;
+    }
+
+    public String getLlmProvider() {
+        return llmProvider;
+    }
+
+    public void setLlmProvider(String llmProvider) {
+        this.llmProvider = llmProvider;
+    }
+
+    public Map<String, String> getLlmApiKeys() {
+        return llmApiKeys;
+    }
+
+    public void setLlmApiKeys(Map<String, String> llmApiKeys) {
+        this.llmApiKeys = llmApiKeys;
+    }
+
+    public String getLlmChatModel() {
+        return llmChatModel;
+    }
+
+    public void setLlmChatModel(String llmChatModel) {
+        this.llmChatModel = llmChatModel;
     }
 }

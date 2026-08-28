@@ -1,1 +1,0 @@
-ALTER TABLE transactions ALTER COLUMN merchant DROP NOT NULL;

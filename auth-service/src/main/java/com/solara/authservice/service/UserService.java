@@ -51,14 +51,24 @@ public class UserService {
         return userRepository.save(user);
     }
 
-    public User updateSettings(UUID id, String iconMode, Boolean llmEnabled) {
+    public User updateSettings(UUID id, String iconMode, Boolean aiSettings,
+                               String llmProvider, String llmApiKey, String llmChatModel) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new com.solara.authservice.exception.UserNotFoundException("User not found: " + id));
         if (iconMode != null) {
             user.setIconMode(iconMode);
         }
-        if (llmEnabled != null) {
-            user.setLlmEnabled(llmEnabled);
+        if (aiSettings != null) {
+            user.setAiSettings(aiSettings);
+        }
+        if (llmProvider != null) {
+            user.setLlmProvider(llmProvider);
+        }
+        if (llmProvider != null && llmApiKey != null) {
+            user.getLlmApiKeys().put(llmProvider, llmApiKey);
+        }
+        if (llmChatModel != null) {
+            user.setLlmChatModel(llmChatModel);
         }
         return userRepository.save(user);
     }

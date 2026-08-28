@@ -63,8 +63,9 @@ public class AuthService {
         return toProfile(user);
     }
 
-    public UserProfileResponse updateSettings(UUID id, String iconMode, Boolean llmEnabled) {
-        User user = userService.updateSettings(id, iconMode, llmEnabled);
+    public UserProfileResponse updateSettings(UUID id, String iconMode, Boolean aiSettings,
+                                              String llmProvider, String llmApiKey, String llmChatModel) {
+        User user = userService.updateSettings(id, iconMode, aiSettings, llmProvider, llmApiKey, llmChatModel);
         logger.info("Settings updated for user: {}", user.getEmail());
         return toProfile(user);
     }
@@ -72,12 +73,20 @@ public class AuthService {
     public UserSettingsResponse getUserSettings(UUID id) {
         User user = userService.findById(id)
                 .orElseThrow(() -> new UserNotFoundException("User not found: " + id));
-        return new UserSettingsResponse(user.getIconMode(), user.getLlmEnabled());
+        String resolvedKey = user.getLlmProvider() != null
+                ? user.getLlmApiKeys().get(user.getLlmProvider())
+                : null;
+        return new UserSettingsResponse(user.getIconMode(), user.getAiSettings(),
+                user.getLlmProvider(), resolvedKey, user.getLlmChatModel());
     }
 
     private UserProfileResponse toProfile(User user) {
+        String resolvedKey = user.getLlmProvider() != null
+                ? user.getLlmApiKeys().get(user.getLlmProvider())
+                : null;
         return new UserProfileResponse(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName(),
-                user.getIconMode(), user.getLlmEnabled());
+                user.getIconMode(), user.getAiSettings(),
+                user.getLlmProvider(), resolvedKey, user.getLlmChatModel());
     }
 
     public void changePassword(UUID id, String currentPassword, String newPassword) {

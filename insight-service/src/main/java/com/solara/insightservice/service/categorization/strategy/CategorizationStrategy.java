@@ -6,16 +6,20 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.solara.insightservice.dto.request.CategorizationInput;
 import com.solara.insightservice.dto.internal.SimilarCategorization;
 import com.solara.insightservice.dto.response.AgentResult;
+import com.solara.insightservice.dto.response.UserSettingsResponse;
 import com.solara.insightservice.model.TransactionCategory;
 import com.solara.insightservice.dto.internal.RAGContext;
 import com.solara.insightservice.service.categorization.strategy.LLMStrategy;
+import com.solara.insightservice.config.LlmConfig;
+import com.solara.insightservice.dto.internal.LlmProperties;
+import com.solara.insightservice.model.LlmProvider;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.retry.annotation.Retry;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -311,47 +315,47 @@ public class CategorizationStrategy implements LLMStrategy {
     private static final String SYSTEM_PROMPT = CATEGORIES_AND_RULES + "\n" + SINGLE_OUTPUT_FORMAT;
     private static final String BATCH_SYSTEM_PROMPT = CATEGORIES_AND_RULES + "\n" + BATCH_OUTPUT_FORMAT;
 
-    private final ChatClient chatClient;
+    private final ChatClient defaultChatClient;
     private final ObjectMapper objectMapper;
-    private final OllamaChatOptions.Builder chatOptionsBuilder;
-    private final OllamaChatOptions.Builder batchChatOptionsBuilder;
+    private final LlmProperties llmProperties;
+    private final LlmConfig llmConfig;
     private final int batchSize;
 
-    public CategorizationStrategy(ChatModel chatModel,
+    public CategorizationStrategy(LlmConfig llmConfig,
                                   ObjectMapper objectMapper,
+                                  LlmProperties llmProperties,
                                   @Value("${app.categorization.batch-size:10}") int batchSize) {
-        this.chatClient = ChatClient.create(chatModel);
+        this.defaultChatClient = ChatClient.create(llmConfig.defaultChatModel());
         this.objectMapper = objectMapper;
-        this.chatOptionsBuilder = OllamaChatOptions.builder()
-                .disableThinking()
-                .format(jsonSchema());
-        this.batchChatOptionsBuilder = OllamaChatOptions.builder()
-                .disableThinking()
-                .format(batchJsonSchema());
+        this.llmProperties = llmProperties;
+        this.llmConfig = llmConfig;
         this.batchSize = batchSize;
     }
 
     @Override
     @CircuitBreaker(name = "llmAgent", fallbackMethod = "degraded")
-    @Retry(name = "llmAgent")
     public AgentResult execute(CategorizationInput input) {
         String inputToAgent = input.isBulkImport() ? input.merchant() : input.normalizedMerchant();
         String userMessage = buildUserMessage(inputToAgent, input.description(), input.amount(),
                 input.examples(), input.ragContext());
 
-        String response = chat(SYSTEM_PROMPT, userMessage, chatOptionsBuilder);
+        ChatOptions.Builder<?> options = perRequestOptions(input.settings(), jsonSchema());
+        ChatClient client = chatClientFor(input.settings());
+        String response = chat(client, SYSTEM_PROMPT, userMessage, options);
         return parseResponse(response);
     }
 
     @Override
     @CircuitBreaker(name = "llmAgent", fallbackMethod = "degradedBatch")
-    @Retry(name = "llmAgent")
     public List<AgentResult> executeBatch(List<CategorizationInput> inputs) {
         List<AgentResult> results = new ArrayList<>(Collections.nCopies(inputs.size(), null));
+        UserSettingsResponse settings = inputs.isEmpty() ? null : inputs.get(0).settings();
+        ChatOptions.Builder<?> options = perRequestOptions(settings, batchJsonSchema());
+        ChatClient client = chatClientFor(settings);
         for (int start = 0; start < inputs.size(); start += batchSize) {
             int end = Math.min(inputs.size(), start + batchSize);
             List<CategorizationInput> chunk = inputs.subList(start, end);
-            List<AgentResult> chunkResults = resolveChunk(chunk);
+            List<AgentResult> chunkResults = resolveChunk(client, chunk, options);
             for (int i = 0; i < chunk.size(); i++) {
                 results.set(start + i, chunkResults.get(i));
             }
@@ -359,8 +363,26 @@ public class CategorizationStrategy implements LLMStrategy {
         return results;
     }
 
-    private List<AgentResult> resolveChunk(List<CategorizationInput> chunk) {
-        List<AgentResult> results = parseBatchResponse(chat(BATCH_SYSTEM_PROMPT, buildBatchUserMessage(chunk), batchChatOptionsBuilder),
+    private ChatOptions.Builder<?> perRequestOptions(UserSettingsResponse settings, Map<String, Object> schema) {
+        if (settings != null && settings.llmProvider() != null) {
+            LlmProvider provider = LlmProvider.valueOf(settings.llmProvider());
+            return llmConfig.buildOptions(provider, settings.llmApiKey(), settings.llmChatModel(), schema);
+        }
+        return llmConfig.buildOptions(llmProperties, schema);
+    }
+
+    private ChatClient chatClientFor(UserSettingsResponse settings) {
+        if (settings != null && settings.llmProvider() != null) {
+            LlmProvider provider = LlmProvider.valueOf(settings.llmProvider());
+            if (provider != LlmProvider.OLLAMA) {
+                return ChatClient.create(llmConfig.resolve(provider, settings.llmApiKey(), settings.llmChatModel()));
+            }
+        }
+        return defaultChatClient;
+    }
+
+    private List<AgentResult> resolveChunk(ChatClient client, List<CategorizationInput> chunk, ChatOptions.Builder<?> options) {
+        List<AgentResult> results = parseBatchResponse(chat(client, BATCH_SYSTEM_PROMPT, buildBatchUserMessage(chunk), options),
                 chunk.size());
         List<Integer> missing = IntStream.range(0, chunk.size())
                 .filter(i -> results.get(i) == null)
@@ -372,7 +394,7 @@ public class CategorizationStrategy implements LLMStrategy {
         log.warn("Batch call returned {} of {} results; re-prompting {} missing items",
                 chunk.size() - missing.size(), chunk.size(), missing.size());
         List<CategorizationInput> missingInputs = missing.stream().map(chunk::get).toList();
-        List<AgentResult> retryResults = parseBatchResponse(chat(BATCH_SYSTEM_PROMPT, buildBatchUserMessage(missingInputs), batchChatOptionsBuilder),
+        List<AgentResult> retryResults = parseBatchResponse(chat(client, BATCH_SYSTEM_PROMPT, buildBatchUserMessage(missingInputs), options),
                 missing.size());
         for (int i = 0; i < missing.size(); i++) {
             results.set(missing.get(i), retryResults.get(i));
@@ -380,9 +402,9 @@ public class CategorizationStrategy implements LLMStrategy {
         return results;
     }
 
-    private String chat(String systemPrompt, String userMessage, OllamaChatOptions.Builder optionsBuilder) {
+    private String chat(ChatClient client, String systemPrompt, String userMessage, ChatOptions.Builder<?> optionsBuilder) {
         long start = System.currentTimeMillis();
-        String content = chatClient.prompt()
+        String content = client.prompt()
                 .system(systemPrompt)
                 .user(userMessage)
                 .options(optionsBuilder)
