@@ -15,6 +15,8 @@ interface ImportSuccess {
   count: number;
   month: number;
   year: number;
+  endMonth?: number;
+  endYear?: number;
 }
 
 /**
@@ -68,14 +70,20 @@ export function useBulkImport() {
       const min = new Date(job.minDate);
       const max = new Date(job.maxDate);
       const sameMonth = min.getFullYear() === max.getFullYear() && min.getMonth() === max.getMonth();
+      bannerMonth = min.getMonth() + 1;
+      bannerYear = min.getFullYear();
       if (sameMonth) {
-        bannerMonth = min.getMonth() + 1;
-        bannerYear = min.getFullYear();
+        saveBannerData({ type: "import", month: bannerMonth, year: bannerYear, count: expectedCount });
       } else {
-        bannerMonth = max.getMonth() + 1;
-        bannerYear = max.getFullYear();
+        saveBannerData({
+          type: "import",
+          month: bannerMonth,
+          year: bannerYear,
+          endMonth: max.getMonth() + 1,
+          endYear: max.getFullYear(),
+          count: expectedCount,
+        });
       }
-      saveBannerData({ type: "import", month: bannerMonth, year: bannerYear, count: expectedCount });
     } else {
       try {
         const userId = getUserId() ?? DEFAULT_USER_ID;
@@ -96,6 +104,8 @@ export function useBulkImport() {
       count: expectedCount,
       month: bannerMonth ?? now.getMonth() + 1,
       year: bannerYear ?? now.getFullYear(),
+      endMonth: job?.maxDate ? new Date(job.maxDate).getMonth() + 1 : undefined,
+      endYear: job?.maxDate ? new Date(job.maxDate).getFullYear() : undefined,
     });
     setShowImportSuccessModal(true);
   }

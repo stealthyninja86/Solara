@@ -5,6 +5,10 @@ import java.time.YearMonth;
 
 public record ReportRange(LocalDate from, LocalDate to) {
 
+    public static ReportRange ofDay(LocalDate day) {
+        return new ReportRange(day, day);
+    }
+
     public static ReportRange of(YearMonth month) {
         return new ReportRange(month.atDay(1), month.atEndOfMonth());
     }

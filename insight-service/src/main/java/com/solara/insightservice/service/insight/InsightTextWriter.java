@@ -2,26 +2,24 @@ package com.solara.insightservice.service.insight;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.solara.insightservice.config.LlmConfig;
 import com.solara.insightservice.config.TracedExecutors;
 import com.solara.insightservice.dto.response.InsightFact;
 import com.solara.insightservice.dto.response.InsightTextResponse;
+import com.solara.insightservice.dto.response.UserSettingsResponse;
 import com.solara.insightservice.model.InsightType;
-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.retry.annotation.Retry;
-import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.ollama.api.OllamaChatOptions;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.stereotype.Component;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,8 +31,6 @@ import java.util.concurrent.Executors;
 public class InsightTextWriter {
 
     private static final Logger log = LoggerFactory.getLogger(InsightTextWriter.class);
-
-    private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(2);
 
     private static final String ANALYST_PROMPT =
             """
@@ -125,81 +121,46 @@ public class InsightTextWriter {
             Every value in the response must appear as a [fact.x] token exactly as provided.
             """;
 
-    private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
-    private final OllamaChatOptions.Builder chatOptionsBuilder;
     private final Executor cardTextExecutor;
-    private final HttpClient probeClient;
-    private final URI ollamaTagsEndpoint;
-    private final boolean aiEnabled;
+    private final LlmConfig llmConfig;
 
-    public InsightTextWriter(ChatModel chatModel, ObjectMapper objectMapper,
-                             @Value("${spring.ai.ollama.base-url:http://host.docker.internal:11434}") String ollamaBaseUrl,
-                             @Value("${app.ai.enabled:true}") boolean aiEnabled) {
-        this.chatClient = ChatClient.create(chatModel);
+    public InsightTextWriter(LlmConfig llmConfig, ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
-        this.chatOptionsBuilder = OllamaChatOptions.builder()
-                .disableThinking()
-                .format(jsonSchema())
-                .presencePenalty(1.5);
         this.cardTextExecutor = TracedExecutors.decorated(Executors.newVirtualThreadPerTaskExecutor());
-        this.probeClient = HttpClient.newBuilder()
-                .connectTimeout(PROBE_TIMEOUT)
-                .build();
-        this.ollamaTagsEndpoint = URI.create(ollamaBaseUrl + "/api/tags");
-        this.aiEnabled = aiEnabled;
+        this.llmConfig = llmConfig;
     }
 
-    @CircuitBreaker(name = "insight-generator", fallbackMethod = "degraded")
-    @Retry(name = "insight-generator")
-    @TimeLimiter(name = "insight-generator")
-    public CompletableFuture<InsightTextResponse> write(InsightFact fact) {
-        return CompletableFuture.supplyAsync(() -> callModel(fact, null), cardTextExecutor);
+    public CompletableFuture<InsightTextResponse> write(InsightFact fact, UserSettingsResponse settings) {
+        return CompletableFuture.supplyAsync(() -> callModel(fact, null, settings), cardTextExecutor);
     }
 
-    @CircuitBreaker(name = "insight-generator", fallbackMethod = "degraded")
-    @Retry(name = "insight-generator")
-    @TimeLimiter(name = "insight-generator")
-    public CompletableFuture<InsightTextResponse> writeCorrected(InsightFact fact, String rejection) {
-        return CompletableFuture.supplyAsync(() -> callModel(fact, rejection), cardTextExecutor);
+    public CompletableFuture<InsightTextResponse> writeCorrected(InsightFact fact, String rejection, UserSettingsResponse settings) {
+        return CompletableFuture.supplyAsync(() -> callModel(fact, rejection, settings), cardTextExecutor);
     }
 
-    private InsightTextResponse callModel(InsightFact fact, String rejection) {
-        if (!aiEnabled) {
+    private InsightTextResponse callModel(InsightFact fact, String rejection, UserSettingsResponse settings) {
+        if (!llmConfig.isEnabled()) {
             log.debug("AI disabled (app.ai.enabled=false) — no card text call: fact={}", fact.id());
             return null;
         }
-        long start = System.currentTimeMillis();
-        String response = chatClient.prompt()
-                .system(promptFor(fact.type()))
-                .user(buildUserMessage(fact, rejection))
-                .options(chatOptionsBuilder)
-                .call()
-                .content();
-        log.debug("Insight card LLM call: fact={}, type={}, corrected={}, durationMs={}",
-                fact.id(), fact.type(), rejection != null, System.currentTimeMillis() - start);
-        return parseResponse(response);
+        if (settings == null || settings.llmProvider() == null) {
+            log.debug("No user settings — skipping card text call: fact={}", fact.id());
+            return null;
+        }
+        ChatOptions.Builder<?> options = llmConfig.perRequestOptions(settings, jsonSchema());
+        ChatModel client = llmConfig.chatClientFor(settings);
+        List<Message> messages = List.of(
+                new SystemMessage(promptFor(fact.type())),
+                new UserMessage(buildUserMessage(fact, rejection))
+        );
+        Prompt prompt = new Prompt(messages, options.build());
+        return LlmConfig.withRetry(() -> parseResponse(client.call(prompt).getResult().getOutput().getText()),
+                "insight-text-" + fact.type());
     }
 
     private String promptFor(InsightType type) {
         return type == InsightType.ACTION ? ADVISOR_PROMPT : ANALYST_PROMPT;
-    }
-
-    public boolean isAvailable() {
-        if (!aiEnabled) {
-            return false;
-        }
-        try {
-            HttpRequest request = HttpRequest.newBuilder(ollamaTagsEndpoint)
-                    .timeout(PROBE_TIMEOUT)
-                    .GET()
-                    .build();
-            HttpResponse<Void> response = probeClient.send(request, HttpResponse.BodyHandlers.discarding());
-            return response.statusCode() == 200;
-        } catch (Exception e) {
-            log.debug("Ollama availability probe failed: {}", e.getMessage());
-            return false;
-        }
     }
 
     private String buildUserMessage(InsightFact fact, String rejection) {
@@ -245,14 +206,14 @@ public class InsightTextWriter {
     private InsightTextResponse parseResponse(String response) {
         if (response == null) return null;
         try {
-            String json = response.replaceAll("```json\\s*|```\\s*", "").trim();
+            String json = LlmConfig.stripFences(response);
             JsonNode node = objectMapper.readTree(json);
             return new InsightTextResponse(
                     node.get("headline").asText(),
                     node.get("body").asText(),
                     node.get("suggestion").asText());
         } catch (Exception e) {
-            log.warn("Failed to parse card text: {}", truncate(response));
+            log.warn("Failed to parse card text: {}", LlmConfig.truncate(response, 300));
             return null;
         }
     }
@@ -268,14 +229,5 @@ public class InsightTextWriter {
         schema.put("properties", properties);
         schema.put("required", List.of("headline", "body", "suggestion"));
         return schema;
-    }
-
-    public CompletableFuture<InsightTextResponse> degraded(Throwable t) {
-        log.warn("Card text degraded: {}", t.getMessage());
-        return CompletableFuture.completedFuture(null);
-    }
-
-    private String truncate(String value) {
-        return value.length() > 300 ? value.substring(0, 300) + "..." : value;
     }
 }

@@ -5,11 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.solara.insightservice.dto.event.TransactionCategorizedEvent;
 import com.solara.insightservice.dto.event.TransactionCategorizedEventPayload;
 import com.solara.insightservice.model.MerchantKnowledgeBase;
-import com.solara.insightservice.model.ProcessedEvent;
 import com.solara.insightservice.model.TransactionCategory;
 import com.solara.insightservice.repository.MerchantKnowledgeBaseRepository;
 import com.solara.insightservice.repository.MerchantProfileRepository;
-import com.solara.insightservice.repository.ProcessedEventRepository;
 import com.solara.insightservice.service.categorization.MerchantResolver;
 import com.solara.insightservice.util.VectorLiterals;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -33,7 +31,7 @@ public class EmbeddingWorker {
     private static final Logger log = LoggerFactory.getLogger(EmbeddingWorker.class);
 
     private final ObjectMapper objectMapper;
-    private final ProcessedEventRepository processedEventRepository;
+    private final ConsumerIdempotencyHelper idempotency;
     private final MerchantProfileRepository merchantProfileRepository;
     private final MerchantKnowledgeBaseRepository knowledgeBaseRepository;
     private final MerchantResolver merchantResolver;
@@ -41,14 +39,14 @@ public class EmbeddingWorker {
     private final boolean aiEnabled;
 
     public EmbeddingWorker(ObjectMapper objectMapper,
-                           ProcessedEventRepository processedEventRepository,
+                           ConsumerIdempotencyHelper idempotency,
                            MerchantProfileRepository merchantProfileRepository,
                            MerchantKnowledgeBaseRepository knowledgeBaseRepository,
                            MerchantResolver merchantResolver,
                            EmbeddingModel embeddingModel,
                            @Value("${app.ai.enabled:true}") boolean aiEnabled) {
         this.objectMapper = objectMapper;
-        this.processedEventRepository = processedEventRepository;
+        this.idempotency = idempotency;
         this.merchantProfileRepository = merchantProfileRepository;
         this.knowledgeBaseRepository = knowledgeBaseRepository;
         this.merchantResolver = merchantResolver;
@@ -70,13 +68,13 @@ public class EmbeddingWorker {
             TransactionCategorizedEvent event =
                     objectMapper.readValue(record.value(), TransactionCategorizedEvent.class);
 
-            if (!claim(event)) {
+            if (!idempotency.claim(event.eventId(), event.eventType(), "insight-embedding-worker")) {
                 if (workAlreadyDone(event)) {
                     log.debug("Categorized event already processed, acking: eventId={}", event.eventId());
                     ack.acknowledge();
                     return;
                 }
-                reclaim(event);
+                idempotency.reclaim(event.eventId(), event.eventType(), "insight-embedding-worker");
             }
 
             TransactionCategorizedEventPayload payload = event.payload();
@@ -103,16 +101,6 @@ public class EmbeddingWorker {
         }
     }
 
-    private boolean claim(TransactionCategorizedEvent event) {
-        try {
-            processedEventRepository.save(new ProcessedEvent(
-                    event.eventId(), event.eventType(), "insight-embedding-worker"));
-            return true;
-        } catch (DataIntegrityViolationException e) {
-            return false;
-        }
-    }
-
     private boolean workAlreadyDone(TransactionCategorizedEvent event) {
         TransactionCategorizedEventPayload payload = event.payload();
         String normalizedMerchant = payload.normalizedMerchant() != null
@@ -120,14 +108,6 @@ public class EmbeddingWorker {
         return merchantProfileRepository
                 .findByUserIdAndNormalizedMerchant(payload.userId(), normalizedMerchant)
                 .isPresent();
-    }
-
-    private void reclaim(TransactionCategorizedEvent event) {
-        log.warn("Stale claim detected, re-processing: eventId={}, eventType={}",
-                event.eventId(), event.eventType());
-        processedEventRepository.deleteById(event.eventId());
-        processedEventRepository.save(new ProcessedEvent(
-                event.eventId(), event.eventType(), "insight-embedding-worker"));
     }
 
     private String getEventId(String raw) {

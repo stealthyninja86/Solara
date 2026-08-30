@@ -8,6 +8,10 @@ public record UserProfileResponse(
         String firstName,
         String lastName,
         String iconMode,
-        boolean llmEnabled
+        boolean aiSettings,
+        String llmProvider,
+        String llmApiKey,
+        String llmChatModel,
+        String llmDescription
 ) {
 }

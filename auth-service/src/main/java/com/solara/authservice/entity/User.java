@@ -30,7 +30,13 @@ public class User {
     private String iconMode = "icons";
 
     @Column(nullable = false)
-    private Boolean llmEnabled = false;
+    private Boolean aiSettings = false;
+
+    @Column(length = 20)
+    private String llmProvider;
+
+    @Column(length = 100)
+    private String llmChatModel;
 
     public UUID getId() {
         return id;
@@ -80,11 +86,27 @@ public class User {
         this.iconMode = iconMode;
     }
 
-    public Boolean getLlmEnabled() {
-        return llmEnabled;
+    public Boolean getAiSettings() {
+        return aiSettings;
     }
 
-    public void setLlmEnabled(Boolean llmEnabled) {
-        this.llmEnabled = llmEnabled;
+    public void setAiSettings(Boolean aiSettings) {
+        this.aiSettings = aiSettings;
+    }
+
+    public String getLlmProvider() {
+        return llmProvider;
+    }
+
+    public void setLlmProvider(String llmProvider) {
+        this.llmProvider = llmProvider;
+    }
+
+    public String getLlmChatModel() {
+        return llmChatModel;
+    }
+
+    public void setLlmChatModel(String llmChatModel) {
+        this.llmChatModel = llmChatModel;
     }
 }

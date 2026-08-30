@@ -271,7 +271,9 @@ export function DashboardOverview() {
           <span className="text-[0.85rem] text-[var(--color-text)]">
             <Icon name="success" size={14} />{" "}
             {bannerData.type === "import"
-              ? `Imported ${bannerData.count} transactions for ${MONTHS[bannerData.month - 1]} ${bannerData.year}`
+              ? bannerData.endMonth
+                ? `Imported ${bannerData.count} transactions from ${MONTHS[bannerData.month - 1]} ${bannerData.year} to ${MONTHS[bannerData.endMonth - 1]} ${bannerData.endYear} — use the dropdown below to navigate between months.`
+                : `Imported ${bannerData.count} transactions for ${MONTHS[bannerData.month - 1]} ${bannerData.year}`
               : <>Transaction created on {bannerData.createdAt ? new Date(bannerData.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : `${MONTHS[bannerData.month - 1]} ${bannerData.year}`} — {bannerData.merchant} ₹{(bannerData.amount ?? 0).toFixed(2)}</>}
           </span>
           <div className="flex items-center gap-2">
@@ -642,7 +644,9 @@ export function DashboardOverview() {
         message="Your transactions have been imported successfully."
         details={bulkImport.importSuccess ? [
           { label: "Transactions imported", value: String(bulkImport.importSuccess.count) },
-          { label: "For", value: `${MONTHS[bulkImport.importSuccess.month - 1]} ${bulkImport.importSuccess.year}` },
+          { label: "For", value: bulkImport.importSuccess.endMonth
+            ? `${MONTHS[bulkImport.importSuccess.month - 1]} ${bulkImport.importSuccess.year} to ${MONTHS[bulkImport.importSuccess.endMonth - 1]} ${bulkImport.importSuccess.endYear}`
+            : `${MONTHS[bulkImport.importSuccess.month - 1]} ${bulkImport.importSuccess.year}` },
         ] : []}
         onDone={() => {
           bulkImport.dismissImportSuccessModal();

@@ -7,6 +7,7 @@ import com.solara.insightservice.dto.event.TransactionCategorizedEventPayload;
 import com.solara.insightservice.dto.request.CategorizationInput;
 import com.solara.insightservice.dto.request.UpdateTransactionRequest;
 import com.solara.insightservice.dto.response.AgentResult;
+import com.solara.insightservice.dto.response.UserSettingsResponse;
 import com.solara.insightservice.model.CategorizedTransaction;
 import com.solara.insightservice.model.TransactionCategory;
 import com.solara.insightservice.repository.CategorizedTransactionRepository;
@@ -95,9 +96,12 @@ public class CategorizationService {
     }
 
     public AgentResult categorize(CategorizationInput input) {
+        UserSettingsResponse settings = userSettingsService.fetchSettings(input.userId());
+        CategorizationInput inputWithSettings = input.withSettings(settings);
+
         // 1. Redis cache — instant, no DB hit
-        if (!input.isBulkImport() && input.normalizedMerchant() != null) {
-            AgentResult cached = cacheGet(input.normalizedMerchant(), input.userId());
+        if (!inputWithSettings.isBulkImport() && inputWithSettings.normalizedMerchant() != null) {
+            AgentResult cached = cacheGet(inputWithSettings.normalizedMerchant(), inputWithSettings.userId());
             if (cached != null) {
                 recordOutcome("cache", "categorized");
                 return cached;
@@ -106,7 +110,7 @@ public class CategorizationService {
 
         // 2. Merchant resolver — KB alias + per-user profile
         AgentResult resolved = merchantResolver.resolve(
-                input.userId(), input.merchant(), input.normalizedMerchant());
+                inputWithSettings.userId(), inputWithSettings.merchant(), inputWithSettings.normalizedMerchant());
         if (resolved != null) {
             recordOutcome("merchant-resolver", "categorized");
             return resolved;
@@ -114,13 +118,13 @@ public class CategorizationService {
 
         // 3. Build RAG context — only when we have a merchant to query
         RAGContext ragContext = null;
-        if (input.normalizedMerchant() != null) {
+        if (inputWithSettings.normalizedMerchant() != null) {
             ragContext = ragContextBuilder.build(
-                    input.userId(), input.merchant(), input.normalizedMerchant());
+                    inputWithSettings.userId(), inputWithSettings.merchant(), inputWithSettings.normalizedMerchant());
         }
         CategorizationInput effectiveInput = ragContext != null
-                ? input.withRAGContext(ragContext).withExamples(ragContext.userHistory())
-                : input;
+                ? inputWithSettings.withRAGContext(ragContext).withExamples(ragContext.userHistory())
+                : inputWithSettings;
 
         // 4. LLM strategy chain
         AgentResult rejected = null;
@@ -198,14 +202,16 @@ public class CategorizationService {
     private List<AgentResult> executeStrategyBatch(LLMStrategy strategy, List<CategorizationInput> inputs) {
         List<CategorizationInput> enriched = inputs.stream()
                 .map(input -> {
-                    if (input.normalizedMerchant() == null) {
-                        return input;
+                    UserSettingsResponse settings = userSettingsService.fetchSettings(input.userId());
+                    CategorizationInput withSettings = input.withSettings(settings);
+                    if (withSettings.normalizedMerchant() == null) {
+                        return withSettings;
                     }
                     RAGContext ragContext = ragContextBuilder.build(
-                            input.userId(), input.merchant(), input.normalizedMerchant());
+                            withSettings.userId(), withSettings.merchant(), withSettings.normalizedMerchant());
                     return ragContext != null
-                            ? input.withRAGContext(ragContext).withExamples(ragContext.userHistory())
-                            : input;
+                            ? withSettings.withRAGContext(ragContext).withExamples(ragContext.userHistory())
+                            : withSettings;
                 })
                 .toList();
 
@@ -424,6 +430,9 @@ public class CategorizationService {
         }
         if (request.needsReview() != null) {
             transaction.setNeedsReview(request.needsReview());
+        }
+        if (request.amount() != null) {
+            transaction.setAmount(request.amount());
         }
 
         String newNormalized = CategorizedTransaction.normalizeMerchant(transaction.getMerchant());

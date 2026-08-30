@@ -27,11 +27,11 @@ const TYPE_DOTS: Record<string, { color: string; pulseClass: string; title: stri
 };
 
 export function FinanceOverview({ month, year, cards, loading = false, transactionCount = 0, generating = false, regenerating = false, generateError, onGenerate, onRegenerate }: Props) {
-  const { llmEnabled } = useAuth();
+  const { aiSettings } = useAuth();
   const { remaining, limit, refresh: refreshRegenerationStatus } = useRegenerationStatus();
   const hasEnoughData = transactionCount >= 3;
 
-  if (llmEnabled === false) return null;
+  if (!aiSettings) return null;
 
   const now = new Date();
   const isCurrentMonth = month === now.getMonth() && year === now.getFullYear();

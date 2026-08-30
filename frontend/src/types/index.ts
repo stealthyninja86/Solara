@@ -72,3 +72,31 @@ export interface UserProfile {
   firstName: string;
   lastName: string;
 }
+
+export type LlmProvider = string;
+
+export interface ProviderInfo {
+  value: string;
+  label: string;
+  description: string;
+  tutorial: string[];
+  requiresApiKey: boolean;
+  keyPlaceholder: string | null;
+  dashboardUrl: string | null;
+}
+
+export interface LlmProvidersResponse {
+  providers: ProviderInfo[];
+  defaultProvider: string;
+}
+
+export interface ModelInfo {
+  name: string;
+  description?: string | null;
+  contextWindow?: number | null;
+}
+
+export interface LlmModelsResponse {
+  provider: string;
+  models: ModelInfo[];
+}

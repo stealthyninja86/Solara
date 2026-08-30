@@ -62,9 +62,11 @@ public interface CategorizedTransactionRepository extends JpaRepository<Categori
                                                @Param("to") Instant to);
 
     @Query("SELECT t FROM CategorizedTransaction t WHERE t.userId = :userId " +
-            "AND t.type = 'DEBIT' AND t.normalizedMerchant IS NOT NULL AND t.createdAt >= :since")
+            "AND t.normalizedMerchant IS NOT NULL AND t.createdAt >= :since")
     List<CategorizedTransaction> findDebitsSince(@Param("userId") UUID userId,
                                                  @Param("since") Instant since);
+
+    List<CategorizedTransaction> findByCategory(TransactionCategory category);
 
     @Query("SELECT COUNT(t) FROM CategorizedTransaction t "
             + "WHERE t.userId = :userId AND t.createdAt >= :since")

@@ -4,12 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.solara.insightservice.dto.response.AgentResult;
 import com.solara.insightservice.dto.request.CategorizationInput;
 import com.solara.insightservice.model.CategorizedTransaction;
-import com.solara.insightservice.model.ProcessedEvent;
 import com.solara.insightservice.model.TransactionCategory;
 import com.solara.insightservice.dto.event.TransactionEvent;
 import com.solara.insightservice.dto.event.TransactionEventPayload;
 import com.solara.insightservice.repository.CategorizedTransactionRepository;
-import com.solara.insightservice.repository.ProcessedEventRepository;
 import com.solara.insightservice.service.categorization.CategorizationService;
 import com.solara.insightservice.service.finance.SubscriptionService;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -31,20 +29,20 @@ public class TransactionEventConsumer {
     private static final Logger log = LoggerFactory.getLogger(TransactionEventConsumer.class);
 
     private final CategorizedTransactionRepository categorizedTransactionRepository;
-    private final ProcessedEventRepository processedEventRepository;
+    private final ConsumerIdempotencyHelper idempotency;
     private final CategorizationService categorizationService;
     private final SubscriptionService subscriptionService;
     private final ObjectMapper objectMapper;
     private final boolean skipAi;
 
     public TransactionEventConsumer(CategorizedTransactionRepository categorizedTransactionRepository,
-                                    ProcessedEventRepository processedEventRepository,
+                                    ConsumerIdempotencyHelper idempotency,
                                     CategorizationService categorizationService,
                                     SubscriptionService subscriptionService,
                                     ObjectMapper objectMapper,
                                     @Value("${app.categorization.skip-ai:false}") boolean skipAi) {
         this.categorizedTransactionRepository = categorizedTransactionRepository;
-        this.processedEventRepository = processedEventRepository;
+        this.idempotency = idempotency;
         this.categorizationService = categorizationService;
         this.subscriptionService = subscriptionService;
         this.objectMapper = objectMapper;
@@ -62,14 +60,14 @@ public class TransactionEventConsumer {
         try {
             TransactionEvent event = objectMapper.readValue(record.value(), TransactionEvent.class);
 
-            if (!claim(event)) {
+            if (!idempotency.claim(event.eventId(), event.eventType(), "insight-transaction-consumer")) {
                 if (workAlreadyDone(event)) {
                     log.info("Event claim skipped (already processed): eventId={}, eventType={}, topic={}, partition={}, offset={}",
                             event.eventId(), event.eventType(), record.topic(), record.partition(), record.offset());
                     ack.acknowledge();
                     return;
                 }
-                reclaim(event);
+                idempotency.reclaim(event.eventId(), event.eventType(), "insight-transaction-consumer");
             }
 
             log.info("Event claimed: eventId={}, eventType={}, topic={}, partition={}, offset={}",
@@ -98,15 +96,6 @@ public class TransactionEventConsumer {
         }
     }
 
-    private boolean claim(TransactionEvent event) {
-        try {
-            processedEventRepository.save(new ProcessedEvent(event.eventId(), event.eventType()));
-            return true;
-        } catch (DataIntegrityViolationException e) {
-            return false;
-        }
-    }
-
     private boolean workAlreadyDone(TransactionEvent event) {
         UUID transactionId = event.payload().transactionId();
         boolean transactionExists = categorizedTransactionRepository.existsById(transactionId);
@@ -115,13 +104,6 @@ public class TransactionEventConsumer {
             case "transaction.deleted.v1" -> !transactionExists;
             default -> true;
         };
-    }
-
-    private void reclaim(TransactionEvent event) {
-        log.warn("Stale claim detected, re-processing: eventId={}, eventType={}",
-                event.eventId(), event.eventType());
-        processedEventRepository.deleteById(event.eventId());
-        processedEventRepository.save(new ProcessedEvent(event.eventId(), event.eventType()));
     }
 
     private void handleCreatedOrUpdated(TransactionEvent event) {

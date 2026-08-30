@@ -2,6 +2,10 @@ package com.solara.authservice.dto.response;
 
 public record UserSettingsResponse(
         String iconMode,
-        Boolean llmEnabled
+        Boolean aiSettings,
+        String llmProvider,
+        String llmApiKey,
+        String llmChatModel,
+        String llmDescription
 ) {
 }

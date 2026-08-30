@@ -82,6 +82,17 @@ public class DashboardService {
         sections.put("overview", run("overview",
                 () -> insightFacade.overview(userId, period, anchor, false), AI_SECTION_TIMEOUT_MILLIS));
 
+        sections.put("daily", run("daily",
+                () -> queryService.queryByPeriod(userId, ReportPeriod.DAILY, anchor),
+                NUMERIC_SECTION_TIMEOUT_MILLIS));
+        sections.put("monthly", run("monthly",
+                () -> queryService.queryByPeriod(userId, ReportPeriod.MONTHLY, anchor),
+                NUMERIC_SECTION_TIMEOUT_MILLIS));
+        LocalDate prevMonthStart = monthStart.minusMonths(1);
+        sections.put("previous", run("previous",
+                () -> queryService.queryByPeriod(userId, ReportPeriod.MONTHLY, prevMonthStart),
+                NUMERIC_SECTION_TIMEOUT_MILLIS));
+
         log.debug("dashboard aggregated: userId={}, period={}, at={}, okSections={}/{}",
                 userId, period, anchor, okCount(sections), sections.size());
         return new DashboardResponse(userId, period, anchor, sections);

@@ -4,6 +4,7 @@ import com.solara.insightservice.config.TracedExecutors;
 import com.solara.insightservice.dto.response.InsightCardResponse;
 import com.solara.insightservice.dto.response.InsightFact;
 import com.solara.insightservice.dto.response.InsightTextResponse;
+import com.solara.insightservice.dto.response.UserSettingsResponse;
 import com.solara.insightservice.metrics.InsightPipeMetrics;
 import com.solara.insightservice.model.CardRejectionReason;
 import com.solara.insightservice.model.InsightType;
@@ -68,12 +69,18 @@ public class InsightGenerator {
     }
 
     public List<InsightCardResponse> feed(UUID userId, ReportPeriod period, LocalDate at,
-                                          boolean llmEnabled, Set<InsightType> types) {
-        return feed(userId, period, at, llmEnabled, types, false);
+                                          boolean aiSettings, Set<InsightType> types) {
+        return feed(userId, period, at, aiSettings, types, false, null);
     }
 
     public List<InsightCardResponse> feed(UUID userId, ReportPeriod period, LocalDate at,
-                                          boolean llmEnabled, Set<InsightType> types, boolean force) {
+                                          boolean aiSettings, Set<InsightType> types, boolean force) {
+        return feed(userId, period, at, aiSettings, types, force, null);
+    }
+
+    public List<InsightCardResponse> feed(UUID userId, ReportPeriod period, LocalDate at,
+                                          boolean aiSettings, Set<InsightType> types, boolean force,
+                                          UserSettingsResponse settings) {
         if (!force) {
             List<InsightCardResponse> cached = cache.get(userId, period, at, types);
             if (cached != null) {
@@ -82,7 +89,7 @@ public class InsightGenerator {
                 return cached;
             }
         }
-        if (!llmEnabled || !aiEnabled) {
+        if (!aiSettings || !aiEnabled) {
             log.debug("Feed empty — not cached (LLM unavailable or disabled): userId={}, period={}, at={}, types={}",
                     userId, period, at, InsightType.cacheSuffix(types));
             return List.of();
@@ -103,7 +110,7 @@ public class InsightGenerator {
         long scheduledAt = System.currentTimeMillis();
         generationExecutor.execute(() -> {
             try {
-                generateAndCache(userId, period, at, types);
+                generateAndCache(userId, period, at, types, settings);
             } finally {
                 generationsInFlight.remove(generationKey);
             }
@@ -114,14 +121,15 @@ public class InsightGenerator {
         return List.of();
     }
 
-    private void generateAndCache(UUID userId, ReportPeriod period, LocalDate at, Set<InsightType> types) {
+    private void generateAndCache(UUID userId, ReportPeriod period, LocalDate at,
+                                  Set<InsightType> types, UserSettingsResponse settings) {
         long start = System.currentTimeMillis();
         List<InsightCardResponse> cards = reportService.buildFacts(userId, period, at).stream()
                 .filter(fact -> types.contains(fact.type()))
                 .sorted(byImpact())
                 .limit(FEED_SIZE)
                 .map(fact -> {
-                    InsightTextResponse text = generate(true, fact);
+                    InsightTextResponse text = generate(true, fact, settings);
                     if (text == null) return null;
                     return buildCard(fact, text);
                 })
@@ -143,18 +151,14 @@ public class InsightGenerator {
         return userId + ":" + period + ":" + at + ":" + InsightType.cacheSuffix(types);
     }
 
-    public boolean isLlmAvailable() {
-        return textWriter.isAvailable();
-    }
-
-    private InsightTextResponse generate(boolean llmEnabled, InsightFact fact) {
-        if (!llmEnabled || !aiEnabled) {
+    private InsightTextResponse generate(boolean aiSettings, InsightFact fact, UserSettingsResponse settings) {
+        if (!aiSettings || !aiEnabled) {
             metrics.generationDropped();
             return null;
         }
         metrics.generationTotal();
         long start = System.currentTimeMillis();
-        InsightTextResponse attempt = await(textWriter.write(fact));
+        InsightTextResponse attempt = await(textWriter.write(fact, settings));
         if (attempt == null) {
             metrics.generationDropped();
             log.warn("Card text unavailable (slow or circuit-open) — error card shown: fact={}", fact.id());
@@ -175,7 +179,7 @@ public class InsightGenerator {
         String correctiveHint = rejection.get() == CardRejectionReason.LENGTH_EXCEEDED
                 ? "length check failed: " + validator.lengthViolations(attempt, fact)
                 : rejection.get().correctiveHint();
-        InsightTextResponse corrected = await(textWriter.writeCorrected(fact, correctiveHint));
+        InsightTextResponse corrected = await(textWriter.writeCorrected(fact, correctiveHint, settings));
         if (corrected != null && validator.validate(corrected, fact).isEmpty()) {
             metrics.generationValid();
             log.debug("LLM card text accepted after re-prompt: fact={}, durationMs={}",

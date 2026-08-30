@@ -42,7 +42,7 @@ export function ImportTipsModal({ visible, onClose, onChooseFile }: Props) {
           <li className="flex gap-2">
             <span className="shrink-0 text-[var(--color-ok)]">•</span>
             <span>
-              CSV files only — max <strong>2 MB</strong>. If your file is larger, split it and keep the header row in each part.
+              Download the statement as <strong>Excel</strong> from your bank (most banks password-protect PDFs, but Excel downloads work fine). Then open it and <strong>Save As → CSV</strong>.
             </span>
           </li>
           <li className="flex gap-2">

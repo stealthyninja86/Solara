@@ -130,9 +130,9 @@
   --color-border-emphasis: #3f3f46;
   --color-text: #fafafa;
   --color-text-dim: #e4e4e7;
-  --color-text-muted: #a1a1aa;
+  --color-text-muted: #d4d4d8;
   --color-text-secondary: #d4d4d8;
-  --color-text-tertiary: #52525b;
+  --color-text-tertiary: #a1a1aa;
   --color-text-light: #a1a1aa;
   --color-text-lighter: #d4d4d8;
   --color-accent: #fafafa;
@@ -200,6 +200,18 @@
 }
 
 @layer base {
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
 
 *,
 *::before,
@@ -319,42 +331,29 @@ h1 {
 .card {
   width: 100%;
   max-width: none;
-  background: color-mix(in srgb, var(--color-text) 6%, transparent);
-  backdrop-filter: blur(var(--blur-xl, 24px)) saturate(1.4);
-  -webkit-backdrop-filter: blur(var(--blur-xl, 24px)) saturate(1.4);
-  border: 1px solid color-mix(in srgb, var(--color-text) 10%, transparent);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 14px;
   padding: 1.75rem;
   margin-bottom: 1.5rem;
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--color-text) 6%, transparent),
-    0 1px 3px var(--color-card-shadow),
-    0 4px 12px color-mix(in srgb, var(--color-card-shadow) 30%, transparent);
+  box-shadow: 0 4px 30px color-mix(in srgb, var(--color-card-shadow) 50%, transparent);
   transition: transform 0.25s cubic-bezier(0.22,1,0.36,1), box-shadow 0.25s, border-color 0.25s;
 }
 
 .card:hover {
   transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--color-text) 16%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--color-text) 8%, transparent),
-    0 4px 16px color-mix(in srgb, var(--color-card-shadow) 60%, transparent),
-    0 12px 40px var(--color-card-shadow);
+  border-color: color-mix(in srgb, var(--color-text) 25%, transparent);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--color-card-shadow) 60%, transparent);
 }
 
 .glass {
-  background: color-mix(in srgb, var(--color-text) 6%, transparent);
-  backdrop-filter: blur(20px) saturate(1.3);
-  -webkit-backdrop-filter: blur(20px) saturate(1.3);
-  border: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--color-text) 6%, transparent),
-    0 1px 3px var(--color-card-shadow);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 4px 30px color-mix(in srgb, var(--color-card-shadow) 50%, transparent);
 }
 
 .glass:hover {
-  background: color-mix(in srgb, var(--color-text) 6%, transparent);
-  border-color: color-mix(in srgb, var(--color-text) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-text) 25%, transparent);
 }
 
 .button {
@@ -462,24 +461,24 @@ h1 {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   CARD VARIANT 2 — Inner shadow + subtle gradient
+   CARD VARIANT 2 — Glassmorphism depth
    ═══════════════════════════════════════════════════════════ */
 .card-depth {
   width: 100%;
   max-width: none;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 3%, transparent), transparent), var(--color-surface);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 1.75rem;
   margin-bottom: 1.5rem;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-bg) 6%, transparent), 0 1px 3px var(--color-card-shadow);
+  box-shadow: 0 4px 30px color-mix(in srgb, var(--color-card-shadow) 50%, transparent);
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .card-depth:hover {
   transform: translateY(-1px);
-  border-color: var(--color-accent-dim);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-bg) 6%, transparent), 0 4px 16px var(--color-card-shadow);
+  border-color: color-mix(in srgb, var(--color-text) 25%, transparent);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--color-card-shadow) 60%, transparent);
 }
 
 .card-depth h2 {
@@ -1131,7 +1130,7 @@ hr {
 }
 
 .transaction-row--header:hover {
-  background: color-mix(in srgb, var(--color-text) 2%, transparent);
+  background: color-mix(in srgb, var(--color-text) 1%, transparent);
 }
 
 .filter-input {
@@ -1732,7 +1731,7 @@ hr {
 
 .btn-edit-budget:hover {
   color: var(--color-text);
-  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  background: color-mix(in srgb, var(--color-text) 1%, transparent);
 }
 
 .budget-ring-wrapper {
@@ -2038,7 +2037,7 @@ hr {
   height: 800px;
   top: -15%;
   left: -10%;
-  background: radial-gradient(circle, rgba(251, 191, 36, 0.35) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.2) 0%, transparent 70%);
   animation: mesh-drift-1 20s ease-in-out infinite;
 }
 
@@ -2069,10 +2068,21 @@ hr {
 
 .dark .mesh-gradient::before {
   opacity: 0.6;
-  background: radial-gradient(circle, rgba(251, 191, 36, 0.1) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
 }
 
 .dark .mesh-gradient::after {
+  opacity: 0.5;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
+}
+
+/* Dashboard mesh — no blobs, just grid */
+.dashboard-mesh::before,
+.dashboard-mesh::after {
+  display: none;
+}
+
+.dark .dashboard-mesh::after {
   opacity: 0.5;
   background: radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
 }
