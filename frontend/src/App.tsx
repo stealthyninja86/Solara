@@ -50,7 +50,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function AppLayout() {
+function LoginRoute() {
   const auth = useAuth();
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -58,54 +58,55 @@ function AppLayout() {
     return <Loader />;
   }
 
+  if (auth.isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return (
+    <LoginPage
+      onLogin={async (email, password) => {
+        setAuthError(null);
+        try {
+          await auth.login(email, password);
+        } catch (e) {
+          setAuthError(e instanceof Error ? e.message : "Invalid email or password");
+          throw e;
+        }
+      }}
+      onRegister={async (email, password, firstName, lastName) => {
+        setAuthError(null);
+        try {
+          await auth.register(email, password, firstName, lastName);
+        } catch (e) {
+          setAuthError(e instanceof Error ? e.message : "Registration failed");
+          throw e;
+        }
+      }}
+      error={authError}
+      clearError={() => setAuthError(null)}
+    />
+  );
+}
+
+function AppLayout() {
   return (
     <Suspense fallback={<Loader />}>
       <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route
-        path="/login"
-        element={
-          auth.isAuthenticated ? (
-            <Navigate to="/dashboard" replace />
-          ) : (
-            <LoginPage
-              onLogin={async (email, password) => {
-                setAuthError(null);
-                try {
-                  await auth.login(email, password);
-                } catch (e) {
-                  setAuthError(e instanceof Error ? e.message : "Invalid email or password");
-                  throw e;
-                }
-              }}
-              onRegister={async (email, password, firstName, lastName) => {
-                setAuthError(null);
-                try {
-                  await auth.register(email, password, firstName, lastName);
-                } catch (e) {
-                  setAuthError(e instanceof Error ? e.message : "Registration failed");
-                  throw e;
-                }
-              }}
-              error={authError}
-              clearError={() => setAuthError(null)}
-            />
-          )
-        }
-      />
-      <Route
-        path="/dashboard"
-        element={
-          <AuthGate>
-            <DashboardLayout />
-          </AuthGate>
-        }
-      >
-        <Route index element={<DashboardOverview />} />
-        <Route path="reports" element={<Reports />} />
-        <Route path="settings" element={<DashboardSettings />} />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<LoginRoute />} />
+        <Route
+          path="/dashboard"
+          element={
+            <AuthGate>
+              <DashboardLayout />
+            </AuthGate>
+          }
+        >
+          <Route index element={<DashboardOverview />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="settings" element={<DashboardSettings />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
   );

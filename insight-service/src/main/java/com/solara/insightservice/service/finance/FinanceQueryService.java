@@ -2,6 +2,7 @@ package com.solara.insightservice.service.finance;
 
 import com.solara.insightservice.dto.response.AvailableDateResponse;
 import com.solara.insightservice.model.BudgetSetting;
+import com.solara.insightservice.model.ReportPeriod;
 import com.solara.insightservice.model.Subscription;
 import com.solara.insightservice.model.SubscriptionStatus;
 import com.solara.insightservice.model.TransactionCategory;
@@ -182,6 +183,28 @@ public class FinanceQueryService {
                     return cmp != 0 ? cmp : Integer.compare(b.month(), a.month());
                 })
                 .toList();
+    }
+
+    /**
+     * Generic period query — returns all numeric metrics for any time range.
+     * Adding a new period (WEEKLY, YEARLY) requires zero new methods.
+     */
+    public Map<String, Object> queryByPeriod(UUID userId, ReportPeriod period, LocalDate at) {
+        ReportPeriod.DateRange range = period.toDateRange(at);
+        Instant from = range.from().atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant to = range.to().atStartOfDay(ZoneOffset.UTC).toInstant();
+
+        BigDecimal totalSpent = netExpenses(userId, from, to);
+        Map<TransactionCategory, BigDecimal> categories = netCategoryTotals(userId, from, to);
+
+        LocalDate monthStart = range.from().withDayOfMonth(1);
+        Optional<BigDecimal> budget = getMonthlyBudget(userId, monthStart);
+
+        return Map.of(
+            "totalSpent", totalSpent,
+            "monthlyBudget", budget.orElse(BigDecimal.ZERO),
+            "categories", categories
+        );
     }
 
     private LocalDate currentMonthStart() {

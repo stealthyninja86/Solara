@@ -4,9 +4,11 @@ import com.solara.authservice.dto.request.LoginRequest;
 import com.solara.authservice.dto.request.RegisterRequest;
 import com.solara.authservice.dto.response.UserProfileResponse;
 import com.solara.authservice.dto.response.UserSettingsResponse;
+import com.solara.authservice.entity.LlmProviderConfig;
 import com.solara.authservice.entity.User;
 import com.solara.authservice.exception.InvalidCredentialsException;
 import com.solara.authservice.exception.UserNotFoundException;
+import com.solara.authservice.repository.LlmProviderConfigRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -20,10 +22,13 @@ public class AuthService {
     Logger logger = LoggerFactory.getLogger(AuthService.class);
 
     private final UserService userService;
+    private final LlmProviderConfigRepository configRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public AuthService(UserService userService, PasswordEncoder passwordEncoder) {
+    public AuthService(UserService userService, LlmProviderConfigRepository configRepository,
+                       PasswordEncoder passwordEncoder) {
         this.userService = userService;
+        this.configRepository = configRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -73,20 +78,28 @@ public class AuthService {
     public UserSettingsResponse getUserSettings(UUID id) {
         User user = userService.findById(id)
                 .orElseThrow(() -> new UserNotFoundException("User not found: " + id));
-        String resolvedKey = user.getLlmProvider() != null
-                ? user.getLlmApiKeys().get(user.getLlmProvider())
+        LlmProviderConfig config = user.getLlmProvider() != null
+                ? configRepository.findByUserIdAndProvider(id, user.getLlmProvider()).orElse(null)
                 : null;
+        String resolvedKey = config != null ? config.getApiKey() : null;
+        String resolvedModel = (config != null && config.getModel() != null && !config.getModel().isEmpty())
+                ? config.getModel() : user.getLlmChatModel();
+        String resolvedDescription = config != null ? config.getDescription() : null;
         return new UserSettingsResponse(user.getIconMode(), user.getAiSettings(),
-                user.getLlmProvider(), resolvedKey, user.getLlmChatModel());
+                user.getLlmProvider(), resolvedKey, resolvedModel, resolvedDescription);
     }
 
     private UserProfileResponse toProfile(User user) {
-        String resolvedKey = user.getLlmProvider() != null
-                ? user.getLlmApiKeys().get(user.getLlmProvider())
+        LlmProviderConfig config = user.getLlmProvider() != null
+                ? configRepository.findByUserIdAndProvider(user.getId(), user.getLlmProvider()).orElse(null)
                 : null;
+        String resolvedKey = config != null ? config.getApiKey() : null;
+        String resolvedModel = (config != null && config.getModel() != null && !config.getModel().isEmpty())
+                ? config.getModel() : user.getLlmChatModel();
+        String resolvedDescription = config != null ? config.getDescription() : null;
         return new UserProfileResponse(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName(),
                 user.getIconMode(), user.getAiSettings(),
-                user.getLlmProvider(), resolvedKey, user.getLlmChatModel());
+                user.getLlmProvider(), resolvedKey, resolvedModel, resolvedDescription);
     }
 
     public void changePassword(UUID id, String currentPassword, String newPassword) {

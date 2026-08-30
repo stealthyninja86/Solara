@@ -2,24 +2,22 @@ package com.solara.insightservice.service.insight;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.solara.insightservice.llm.LlmHealthProbe;
 import com.solara.insightservice.config.LlmConfig;
-import com.solara.insightservice.dto.internal.LlmProperties;
 import com.solara.insightservice.config.TracedExecutors;
 import com.solara.insightservice.dto.response.InsightFact;
 import com.solara.insightservice.dto.response.InsightTextResponse;
 import com.solara.insightservice.dto.response.UserSettingsResponse;
 import com.solara.insightservice.model.InsightType;
-import com.solara.insightservice.model.LlmProvider;
-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 
-import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.ChatOptions;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -123,85 +121,46 @@ public class InsightTextWriter {
             Every value in the response must appear as a [fact.x] token exactly as provided.
             """;
 
-    private final ChatClient defaultChatClient;
     private final ObjectMapper objectMapper;
     private final Executor cardTextExecutor;
-    private final LlmHealthProbe healthProbe;
-    private final LlmProperties llmProperties;
     private final LlmConfig llmConfig;
-    private final boolean aiEnabled;
 
-    public InsightTextWriter(LlmConfig llmConfig, ObjectMapper objectMapper,
-                             LlmProperties llmProperties,
-                             LlmHealthProbe healthProbe,
-                             @Value("${app.ai.enabled:true}") boolean aiEnabled) {
-        this.defaultChatClient = ChatClient.create(llmConfig.defaultChatModel());
+    public InsightTextWriter(LlmConfig llmConfig, ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
         this.cardTextExecutor = TracedExecutors.decorated(Executors.newVirtualThreadPerTaskExecutor());
-        this.healthProbe = healthProbe;
-        this.llmProperties = llmProperties;
         this.llmConfig = llmConfig;
-        this.aiEnabled = aiEnabled;
     }
 
-    private ChatOptions.Builder<?> perRequestOptions(UserSettingsResponse settings) {
-        if (settings != null && settings.llmProvider() != null) {
-            LlmProvider provider = LlmProvider.valueOf(settings.llmProvider());
-            return llmConfig.buildOptions(provider, settings.llmApiKey(), settings.llmChatModel(), jsonSchema());
-        }
-        return llmConfig.buildOptions(llmProperties, jsonSchema());
-    }
-
-    private ChatClient chatClientFor(UserSettingsResponse settings) {
-        if (settings != null && settings.llmProvider() != null) {
-            LlmProvider provider = LlmProvider.valueOf(settings.llmProvider());
-            if (provider != LlmProvider.OLLAMA) {
-                return ChatClient.create(llmConfig.resolve(provider, settings.llmApiKey(), settings.llmChatModel()));
-            }
-        }
-        return defaultChatClient;
-    }
-
-    @CircuitBreaker(name = "insight-generator", fallbackMethod = "degraded")
-    @TimeLimiter(name = "insight-generator")
     public CompletableFuture<InsightTextResponse> write(InsightFact fact, UserSettingsResponse settings) {
         return CompletableFuture.supplyAsync(() -> callModel(fact, null, settings), cardTextExecutor);
     }
 
-    @CircuitBreaker(name = "insight-generator", fallbackMethod = "degraded")
-    @TimeLimiter(name = "insight-generator")
     public CompletableFuture<InsightTextResponse> writeCorrected(InsightFact fact, String rejection, UserSettingsResponse settings) {
         return CompletableFuture.supplyAsync(() -> callModel(fact, rejection, settings), cardTextExecutor);
     }
 
     private InsightTextResponse callModel(InsightFact fact, String rejection, UserSettingsResponse settings) {
-        if (!aiEnabled) {
+        if (!llmConfig.isEnabled()) {
             log.debug("AI disabled (app.ai.enabled=false) — no card text call: fact={}", fact.id());
             return null;
         }
-        ChatOptions.Builder<?> options = perRequestOptions(settings);
-        ChatClient client = chatClientFor(settings);
-        long start = System.currentTimeMillis();
-        String response = client.prompt()
-                .system(promptFor(fact.type()))
-                .user(buildUserMessage(fact, rejection))
-                .options(options)
-                .call()
-                .content();
-        log.debug("Insight card LLM call: fact={}, type={}, corrected={}, durationMs={}",
-                fact.id(), fact.type(), rejection != null, System.currentTimeMillis() - start);
-        return parseResponse(response);
+        if (settings == null || settings.llmProvider() == null) {
+            log.debug("No user settings — skipping card text call: fact={}", fact.id());
+            return null;
+        }
+        ChatOptions.Builder<?> options = llmConfig.perRequestOptions(settings, jsonSchema());
+        ChatModel client = llmConfig.chatClientFor(settings);
+        List<Message> messages = List.of(
+                new SystemMessage(promptFor(fact.type())),
+                new UserMessage(buildUserMessage(fact, rejection))
+        );
+        Prompt prompt = new Prompt(messages, options.build());
+        return LlmConfig.withRetry(() -> parseResponse(client.call(prompt).getResult().getOutput().getText()),
+                "insight-text-" + fact.type());
     }
 
     private String promptFor(InsightType type) {
         return type == InsightType.ACTION ? ADVISOR_PROMPT : ANALYST_PROMPT;
-    }
-
-    public boolean isAvailable() {
-        if (!aiEnabled) {
-            return false;
-        }
-        return healthProbe.isAvailable(llmProperties);
     }
 
     private String buildUserMessage(InsightFact fact, String rejection) {
@@ -247,14 +206,14 @@ public class InsightTextWriter {
     private InsightTextResponse parseResponse(String response) {
         if (response == null) return null;
         try {
-            String json = response.replaceAll("```json\\s*|```\\s*", "").trim();
+            String json = LlmConfig.stripFences(response);
             JsonNode node = objectMapper.readTree(json);
             return new InsightTextResponse(
                     node.get("headline").asText(),
                     node.get("body").asText(),
                     node.get("suggestion").asText());
         } catch (Exception e) {
-            log.warn("Failed to parse card text: {}", truncate(response));
+            log.warn("Failed to parse card text: {}", LlmConfig.truncate(response, 300));
             return null;
         }
     }
@@ -270,14 +229,5 @@ public class InsightTextWriter {
         schema.put("properties", properties);
         schema.put("required", List.of("headline", "body", "suggestion"));
         return schema;
-    }
-
-    public CompletableFuture<InsightTextResponse> degraded(Throwable t) {
-        log.warn("Card text degraded: {}", t.getMessage());
-        return CompletableFuture.completedFuture(null);
-    }
-
-    private String truncate(String value) {
-        return value.length() > 300 ? value.substring(0, 300) + "..." : value;
     }
 }

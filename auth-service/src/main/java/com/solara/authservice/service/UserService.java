@@ -1,7 +1,9 @@
 package com.solara.authservice.service;
 
+import com.solara.authservice.repository.LlmProviderConfigRepository;
 import com.solara.authservice.repository.UserRepository;
 import com.solara.authservice.dto.request.RegisterRequest;
+import com.solara.authservice.entity.LlmProviderConfig;
 import com.solara.authservice.entity.User;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -15,10 +17,13 @@ import java.util.UUID;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final LlmProviderConfigRepository configRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserService(UserRepository userRepository, LlmProviderConfigRepository configRepository,
+                       PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.configRepository = configRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -64,11 +69,22 @@ public class UserService {
         if (llmProvider != null) {
             user.setLlmProvider(llmProvider);
         }
-        if (llmProvider != null && llmApiKey != null) {
-            user.getLlmApiKeys().put(llmProvider, llmApiKey);
-        }
         if (llmChatModel != null) {
             user.setLlmChatModel(llmChatModel);
+        }
+        if (llmProvider != null && llmApiKey != null) {
+            LlmProviderConfig config = configRepository.findByUserIdAndProvider(id, llmProvider)
+                    .orElse(new LlmProviderConfig(id, llmProvider));
+            config.setApiKey(llmApiKey);
+            if (llmChatModel != null) {
+                config.setModel(llmChatModel);
+            }
+            configRepository.save(config);
+        } else if (llmProvider != null && llmChatModel != null) {
+            configRepository.findByUserIdAndProvider(id, llmProvider).ifPresent(config -> {
+                config.setModel(llmChatModel);
+                configRepository.save(config);
+            });
         }
         return userRepository.save(user);
     }

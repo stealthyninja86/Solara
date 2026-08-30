@@ -11,6 +11,7 @@ public record UserProfileResponse(
         boolean aiSettings,
         String llmProvider,
         String llmApiKey,
-        String llmChatModel
+        String llmChatModel,
+        String llmDescription
 ) {
 }

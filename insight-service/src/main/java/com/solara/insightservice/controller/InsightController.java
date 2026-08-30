@@ -1,8 +1,8 @@
 package com.solara.insightservice.controller;
 
-import com.solara.insightservice.dto.response.AiStatusResponse;
 import com.solara.insightservice.dto.response.AvailableDateResponse;
 import com.solara.insightservice.dto.response.InsightCardResponse;
+import com.solara.insightservice.dto.response.RecommendationResponse;
 import com.solara.insightservice.dto.response.ReportResponse;
 import com.solara.insightservice.dto.response.RegenerationStatusResponse;
 import com.solara.insightservice.dto.response.SafeToSpendResponse;
@@ -11,7 +11,6 @@ import com.solara.insightservice.dto.response.TrendsResponse;
 import com.solara.insightservice.exception.AiInsightsDisabledException;
 import com.solara.insightservice.model.ReportPeriod;
 import com.solara.insightservice.model.TransactionCategory;
-import com.solara.insightservice.service.insight.InsightGenerator;
 import com.solara.insightservice.service.insight.InsightFacade;
 import com.solara.insightservice.service.finance.FinanceQueryService;
 import com.solara.insightservice.service.ratelimit.RegenerationRateLimiter;
@@ -34,30 +33,22 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/insights")
-public class AnalyticsController {
+public class InsightController {
+
+    private static final Logger log = LoggerFactory.getLogger(InsightController.class);
 
     private final FinanceQueryService queryService;
     private final ReportService reportService;
     private final InsightFacade insightFacade;
-    private final InsightGenerator insightGenerator;
     private final RegenerationRateLimiter regenerationRateLimiter;
 
-    private static final Logger log = LoggerFactory.getLogger(AnalyticsController.class);
-
-    public AnalyticsController(FinanceQueryService queryService, ReportService reportService,
-                               InsightFacade insightFacade, InsightGenerator insightGenerator,
-                               RegenerationRateLimiter regenerationRateLimiter) {
+    public InsightController(FinanceQueryService queryService, ReportService reportService,
+                             InsightFacade insightFacade,
+                             RegenerationRateLimiter regenerationRateLimiter) {
         this.queryService = queryService;
         this.reportService = reportService;
         this.insightFacade = insightFacade;
-        this.insightGenerator = insightGenerator;
         this.regenerationRateLimiter = regenerationRateLimiter;
-    }
-
-    @GetMapping("/ai/status")
-    public ResponseEntity<AiStatusResponse> aiStatus() {
-        log.debug("ai status requested");
-        return ResponseEntity.ok(new AiStatusResponse(insightGenerator.isLlmAvailable()));
     }
 
     @GetMapping("/regeneration-status")
@@ -125,13 +116,29 @@ public class AnalyticsController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate at,
             @RequestParam(defaultValue = "false") boolean refresh) {
         if (!insightFacade.isLlmEnabled(userId)) {
-            log.info("overview rejected: userId={}, llmEnabled=false", userId);
+            log.info("overview rejected: userId={}, aiSettings=false", userId);
             throw new AiInsightsDisabledException();
         }
         if (refresh) {
             regenerationRateLimiter.consume(userId);
         }
         return ResponseEntity.ok(insightFacade.overview(userId, period, at, refresh));
+    }
+
+    @GetMapping("/recommendations")
+    public ResponseEntity<List<RecommendationResponse>> recommendations(
+            @RequestParam UUID userId,
+            @RequestParam ReportPeriod period,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate at,
+            @RequestParam(defaultValue = "false") boolean refresh) {
+        if (!insightFacade.isLlmEnabled(userId)) {
+            log.info("recommendations rejected: userId={}, aiSettings=false", userId);
+            throw new AiInsightsDisabledException();
+        }
+        if (refresh) {
+            regenerationRateLimiter.consume(userId);
+        }
+        return ResponseEntity.ok(insightFacade.recommendations(userId, period, at, refresh));
     }
 
     @GetMapping("/available-dates")

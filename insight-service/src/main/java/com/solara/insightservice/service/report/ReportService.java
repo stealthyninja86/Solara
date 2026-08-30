@@ -118,6 +118,7 @@ public class ReportService {
                                                         List<ReportCategorySpending> categories) {
         List<SolaraInsightResponse> insights = new ArrayList<>();
         String periodWord = switch (period) {
+            case DAILY -> "day";
             case WEEKLY -> "week";
             case MONTHLY -> "month";
             case YEARLY -> "year";
@@ -296,6 +297,11 @@ public class ReportService {
 
     private ReportSummary buildSummary(UUID userId, ReportPeriod period, ReportRange current) {
         BigDecimal income = switch (period) {
+            case DAILY -> {
+                YearMonth month = YearMonth.from(current.from());
+                BigDecimal monthIncome = monthlyIncome(userId, month);
+                yield monthIncome.divide(BigDecimal.valueOf(month.lengthOfMonth()), 2, RoundingMode.HALF_UP);
+            }
             case WEEKLY -> {
                 YearMonth month = YearMonth.from(current.from());
                 BigDecimal monthIncome = monthlyIncome(userId, month);
@@ -336,6 +342,15 @@ public class ReportService {
     private List<ReportTrendPoint> buildTrend(UUID userId, ReportPeriod period, LocalDate at) {
         List<ReportTrendPoint> points = new ArrayList<>();
         switch (period) {
+            case DAILY -> {
+                YearMonth month = YearMonth.from(at);
+                BigDecimal monthIncome = monthlyIncome(userId, month);
+                BigDecimal dailyIncome = monthIncome
+                        .divide(BigDecimal.valueOf(month.lengthOfMonth()), 2, RoundingMode.HALF_UP);
+                ReportRange day = ReportRange.ofDay(at);
+                BigDecimal expenses = netExpenses(userId, day);
+                points.add(new ReportTrendPoint(String.valueOf(at.getDayOfMonth()), dailyIncome, expenses));
+            }
             case WEEKLY -> {
                 YearMonth month = YearMonth.from(at);
                 ReportRange week = currentRange(ReportPeriod.WEEKLY, at);
@@ -437,6 +452,7 @@ public class ReportService {
 
     private ReportRange currentRange(ReportPeriod period, LocalDate at) {
         return switch (period) {
+            case DAILY -> ReportRange.ofDay(at);
             case WEEKLY -> ReportRange.weekOf(YearMonth.from(at), weekBucket(at.getDayOfMonth()));
             case MONTHLY -> ReportRange.of(YearMonth.from(at));
             case YEARLY -> ReportRange.ofYear(at.getYear());
@@ -445,6 +461,7 @@ public class ReportService {
 
     private ReportRange previousRange(ReportPeriod period, LocalDate at) {
         return switch (period) {
+            case DAILY -> ReportRange.ofDay(at.minusDays(1));
             case WEEKLY -> ReportRange.weekOf(YearMonth.from(at).minusMonths(1), weekBucket(at.getDayOfMonth()));
             case MONTHLY -> ReportRange.of(YearMonth.from(at).minusMonths(1));
             case YEARLY -> ReportRange.ofYear(at.getYear() - 1);
@@ -481,6 +498,14 @@ public class ReportService {
     private Optional<InsightFact> createBudgetStatusFact(UUID userId, ReportPeriod period,
                                                          ReportResponse report, ReportSummary summary) {
         Optional<BigDecimal> periodBudgetOpt = switch (period) {
+            case DAILY -> {
+                YearMonth yearMonth = YearMonth.from(report.from());
+                Optional<BigDecimal> monthlyOpt = financeQueryService.getMonthlyBudget(userId, yearMonth.atDay(1));
+                if (monthlyOpt.isEmpty() || monthlyOpt.get().signum() <= 0) yield Optional.empty();
+                BigDecimal dailyBudget = monthlyOpt.get()
+                        .divide(BigDecimal.valueOf(yearMonth.lengthOfMonth()), 2, RoundingMode.HALF_UP);
+                yield Optional.of(dailyBudget);
+            }
             case WEEKLY -> {
                 YearMonth yearMonth = YearMonth.from(report.from());
                 Optional<BigDecimal> monthlyOpt = financeQueryService.getMonthlyBudget(userId, yearMonth.atDay(1));
@@ -549,6 +574,14 @@ public class ReportService {
     private Optional<InsightFact> createBudgetActionFact(UUID userId, ReportPeriod period,
                                                          ReportResponse report, ReportSummary summary) {
         Optional<BigDecimal> periodBudgetOpt = switch (period) {
+            case DAILY -> {
+                YearMonth yearMonth = YearMonth.from(report.from());
+                Optional<BigDecimal> monthlyOpt = financeQueryService.getMonthlyBudget(userId, yearMonth.atDay(1));
+                if (monthlyOpt.isEmpty() || monthlyOpt.get().signum() <= 0) yield Optional.empty();
+                BigDecimal dailyBudget = monthlyOpt.get()
+                        .divide(BigDecimal.valueOf(yearMonth.lengthOfMonth()), 2, RoundingMode.HALF_UP);
+                yield Optional.of(dailyBudget);
+            }
             case WEEKLY -> {
                 YearMonth yearMonth = YearMonth.from(report.from());
                 Optional<BigDecimal> monthlyOpt = financeQueryService.getMonthlyBudget(userId, yearMonth.atDay(1));
@@ -616,6 +649,7 @@ public class ReportService {
 
     private String periodWord(ReportPeriod period) {
         return switch (period) {
+            case DAILY -> "day";
             case WEEKLY -> "week";
             case MONTHLY -> "month";
             case YEARLY -> "year";

@@ -431,6 +431,9 @@ public class CategorizationService {
         if (request.needsReview() != null) {
             transaction.setNeedsReview(request.needsReview());
         }
+        if (request.amount() != null) {
+            transaction.setAmount(request.amount());
+        }
 
         String newNormalized = CategorizedTransaction.normalizeMerchant(transaction.getMerchant());
         if (oldNormalized != null) {

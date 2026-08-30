@@ -5,6 +5,7 @@ public record UserSettingsResponse(
         Boolean aiSettings,
         String llmProvider,
         String llmApiKey,
-        String llmChatModel
+        String llmChatModel,
+        String llmDescription
 ) {
 }

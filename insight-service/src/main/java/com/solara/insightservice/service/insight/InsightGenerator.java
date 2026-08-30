@@ -151,10 +151,6 @@ public class InsightGenerator {
         return userId + ":" + period + ":" + at + ":" + InsightType.cacheSuffix(types);
     }
 
-    public boolean isLlmAvailable() {
-        return textWriter.isAvailable();
-    }
-
     private InsightTextResponse generate(boolean aiSettings, InsightFact fact, UserSettingsResponse settings) {
         if (!aiSettings || !aiEnabled) {
             metrics.generationDropped();

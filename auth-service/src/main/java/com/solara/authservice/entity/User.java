@@ -3,11 +3,7 @@ package com.solara.authservice.entity;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
 @Entity
@@ -38,10 +34,6 @@ public class User {
 
     @Column(length = 20)
     private String llmProvider;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb", nullable = false)
-    private Map<String, String> llmApiKeys = new HashMap<>();
 
     @Column(length = 100)
     private String llmChatModel;
@@ -108,14 +100,6 @@ public class User {
 
     public void setLlmProvider(String llmProvider) {
         this.llmProvider = llmProvider;
-    }
-
-    public Map<String, String> getLlmApiKeys() {
-        return llmApiKeys;
-    }
-
-    public void setLlmApiKeys(Map<String, String> llmApiKeys) {
-        this.llmApiKeys = llmApiKeys;
     }
 
     public String getLlmChatModel() {
